@@ -1,11 +1,12 @@
-#include "ada/app.h"
-#include "ada/geom/meshes.h"
+#include "vera/app.h"
+#include "vera/string.h"
+#include "vera/geom/meshes.h"
 
 using namespace std;
-using namespace ada;
+using namespace vera;
 using namespace glm;
 
-class myApp : public App {
+class VeraApp : public App {
     
     Vbo     world;
     Shader  world_shader;
@@ -118,7 +119,7 @@ class myApp : public App {
     }
 };
 
-myApp       app;
+VeraApp app;
 
 int main(int argc, char **argv) {
     app.run();

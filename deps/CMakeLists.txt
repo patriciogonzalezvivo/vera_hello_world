@@ -1,1 +1,1 @@
-add_subdirectory(ada)
+add_subdirectory(vera)
