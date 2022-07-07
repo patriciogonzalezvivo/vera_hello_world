@@ -114,7 +114,7 @@ make
 ```bash
 git clone --recursive https://github.com/patriciogonzalezvivo/vera_hello_world.git
 cd vera_hello_world
-cd www
+cd doc
 cmake .. -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
 make
 
