@@ -83,14 +83,13 @@ source ./emsdk_env.sh
 cd ..
 ```
 
-
 ## 2. Compiling the projects
 
 ### For windows managers like MacOS, Windows or Linux (with X11 Window Manager) (all through GLFW) 
 
 ```bash
 git clone --recursive https://github.com/patriciogonzalezvivo/vera_hello_world.git
-cd vera_test
+cd vera_hello_world
 mkdir build
 cd build
 cmake ..
@@ -102,7 +101,7 @@ make
 
 ```bash
 git clone --recursive https://github.com/patriciogonzalezvivo/vera_hello_world.git
-cd vera_test
+cd vera_hello_world
 mkdir build
 cd build
 cmake -DNO_X11=TRUE ..
@@ -114,9 +113,8 @@ make
 
 ```bash
 git clone --recursive https://github.com/patriciogonzalezvivo/vera_hello_world.git
-cd vera_test
-mkdir build
-cd build
+cd vera_hello_world
+cd www
 cmake .. -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
 make
 
