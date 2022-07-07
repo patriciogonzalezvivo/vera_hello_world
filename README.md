@@ -1,8 +1,8 @@
 ![](thumbnail.png)
 
-This is a "Hello World" program using [ADA](https://github.com/patriciogonzalezvivo/ada).
+This is a "Hello World" program using [VERA](https://github.com/patriciogonzalezvivo/vera).
 
-Please visit [ADA](https://github.com/patriciogonzalezvivo/ada) repository for more information on how to compile.
+Please visit [VERA](https://github.com/patriciogonzalezvivo/vera) repository for more information on how to compile.
 
 
 ## 1. Install Dependencies
@@ -89,8 +89,8 @@ cd ..
 ### For windows managers like MacOS, Windows or Linux (with X11 Window Manager) (all through GLFW) 
 
 ```bash
-git clone --recursive https://github.com/patriciogonzalezvivo/ada_example.git
-cd ada_test
+git clone --recursive https://github.com/patriciogonzalezvivo/vera_hello_world.git
+cd vera_test
 mkdir build
 cd build
 cmake ..
@@ -101,8 +101,8 @@ make
 ### For Linux with no X11 Window Manager
 
 ```bash
-git clone --recursive https://github.com/patriciogonzalezvivo/ada_example.git
-cd ada_test
+git clone --recursive https://github.com/patriciogonzalezvivo/vera_hello_world.git
+cd vera_test
 mkdir build
 cd build
 cmake -DNO_X11=TRUE ..
@@ -113,8 +113,8 @@ make
 ### As a Emscripten WebAssembly project
 
 ```bash
-git clone --recursive https://github.com/patriciogonzalezvivo/ada_example.git
-cd ada_test
+git clone --recursive https://github.com/patriciogonzalezvivo/vera_hello_world.git
+cd vera_test
 mkdir build
 cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
