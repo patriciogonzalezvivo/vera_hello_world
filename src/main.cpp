@@ -1,6 +1,6 @@
 #include "vera/app.h"
-#include "vera/string.h"
-#include "vera/geom/meshes.h"
+#include "vera/ops/string.h"
+#include "vera/ops/meshes.h"
 
 using namespace std;
 using namespace vera;
@@ -59,7 +59,7 @@ class VeraApp : public App {
         world.load( sphereMesh() );
 
         satellite.load( boxMesh(0.075f, 0.075f, 0.075f) );
-        addLabel( [](){ return toString(getFps(), 1); }, &satellite_pos, LABEL_LINE_TO_WINDOW_BORDER, 10.0 );
+        addLabel( [](){ return toString(getFps(), 1) + "fps"; }, &satellite_pos, LABEL_UP, 10.0 );
         
         world_texture.load( "earth-water.png" );
 
@@ -109,6 +109,7 @@ class VeraApp : public App {
 
         fill(1.0f);
         stroke(0.5f);
+        textSize(18.0f);
         labels();
 
         textAlign(ALIGN_CENTER);
