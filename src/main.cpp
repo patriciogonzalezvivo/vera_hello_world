@@ -59,7 +59,6 @@ class VeraApp : public App {
         world.load( sphereMesh() );
 
         satellite.load( boxMesh(0.075f, 0.075f, 0.075f) );
-        addLabel( [](){ return toString(getFps(), 1) + "fps"; }, &satellite_pos, LABEL_UP, 10.0 );
         
         world_texture.load( "earth-water.png" );
 
@@ -71,6 +70,10 @@ class VeraApp : public App {
         sun.setType(LIGHT_POINT);
         addLight(sun);
         lights();
+
+        textAlign(ALIGN_CENTER);
+        textAlign(ALIGN_BOTTOM);
+        textSize(28.0f);
 
         background(0.0);
         blendMode(BLEND_ALPHA);
@@ -107,14 +110,6 @@ class VeraApp : public App {
         stroke(0.75f, 0.0f, 0.0f);
         line(orbit);
 
-        fill(1.0f);
-        stroke(0.5f);
-        textSize(18.0f);
-        labels();
-
-        textAlign(ALIGN_CENTER);
-        textAlign(ALIGN_BOTTOM);
-        textSize(28.0f);
         fill(1.0f);
         text("Hello World", width * 0.5f, height - 50.0f);
     }
