@@ -195,7 +195,7 @@ var Module = typeof Module != 'undefined' ? Module : {};
     }
 
     }
-    loadPackage({"files": [{"filename": "/earth-water.png", "start": 0, "end": 117691}], "remote_package_size": 117691, "package_uuid": "eb5f7e03-4419-46e7-96aa-e2e054402b06"});
+    loadPackage({"files": [{"filename": "/earth-water.png", "start": 0, "end": 117691}], "remote_package_size": 117691, "package_uuid": "3608eb58-db35-4505-82e5-ee5b03dafa5c"});
 
   })();
 
@@ -6263,33 +6263,11 @@ var ASM_CONSTS = {
       GLctx.uniform3f(webglGetUniformLocation(location), v0, v1, v2);
     }
 
-  var miniTempWebGLFloatBuffers = [];
-  function _glUniform3fv(location, count, value) {
-  
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform3fv(webglGetUniformLocation(location), HEAPF32, value>>2, count*3);
-        return;
-      }
-  
-      if (count <= 96) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLFloatBuffers[3*count-1];
-        for (var i = 0; i < 3*count; i += 3) {
-          view[i] = HEAPF32[(((value)+(4*i))>>2)];
-          view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
-          view[i+2] = HEAPF32[(((value)+(4*i+8))>>2)];
-        }
-      } else
-      {
-        var view = HEAPF32.subarray((value)>>2, (value+count*12)>>2);
-      }
-      GLctx.uniform3fv(webglGetUniformLocation(location), view);
-    }
-
   function _glUniform4f(location, v0, v1, v2, v3) {
       GLctx.uniform4f(webglGetUniformLocation(location), v0, v1, v2, v3);
     }
 
+  var miniTempWebGLFloatBuffers = [];
   function _glUniformMatrix3fv(location, count, transpose, value) {
   
       if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -8002,10 +7980,6 @@ var ASM_CONSTS = {
       return GLFW.setScrollCallback(winid, cbfun);
     }
 
-  function _glfwSetWindowPos(winid, x, y) {
-      GLFW.setWindowPos(winid, x, y);
-    }
-
   function _glfwSetWindowSize(winid, width, height) {
       GLFW.setWindowSize(winid, width, height);
     }
@@ -8768,7 +8742,6 @@ var asmLibraryArg = {
   "glUniform1i": _glUniform1i,
   "glUniform2f": _glUniform2f,
   "glUniform3f": _glUniform3f,
-  "glUniform3fv": _glUniform3fv,
   "glUniform4f": _glUniform4f,
   "glUniformMatrix3fv": _glUniformMatrix3fv,
   "glUniformMatrix4fv": _glUniformMatrix4fv,
@@ -8789,7 +8762,6 @@ var asmLibraryArg = {
   "glfwSetKeyCallback": _glfwSetKeyCallback,
   "glfwSetMouseButtonCallback": _glfwSetMouseButtonCallback,
   "glfwSetScrollCallback": _glfwSetScrollCallback,
-  "glfwSetWindowPos": _glfwSetWindowPos,
   "glfwSetWindowSize": _glfwSetWindowSize,
   "glfwSwapBuffers": _glfwSwapBuffers,
   "glfwTerminate": _glfwTerminate,
@@ -8805,10 +8777,10 @@ var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__w
 var _main = Module["_main"] = createExportWrapper("main");
 
 /** @type {function(...*):?} */
-var _malloc = Module["_malloc"] = createExportWrapper("malloc");
+var _free = Module["_free"] = createExportWrapper("free");
 
 /** @type {function(...*):?} */
-var _free = Module["_free"] = createExportWrapper("free");
+var _malloc = Module["_malloc"] = createExportWrapper("malloc");
 
 /** @type {function(...*):?} */
 var ___errno_location = Module["___errno_location"] = createExportWrapper("__errno_location");
