@@ -195,7 +195,7 @@ var Module = typeof Module != 'undefined' ? Module : {};
     }
 
     }
-    loadPackage({"files": [{"filename": "/earth-water.png", "start": 0, "end": 117691}], "remote_package_size": 117691, "package_uuid": "4ce33360-ca92-46ff-a174-1d9fbcfd4c57"});
+    loadPackage({"files": [{"filename": "/earth-water.png", "start": 0, "end": 117691}], "remote_package_size": 117691, "package_uuid": "3fe2276d-1c46-4329-95ae-257f8260684b"});
 
   })();
 
@@ -7980,6 +7980,10 @@ var ASM_CONSTS = {
       return GLFW.setScrollCallback(winid, cbfun);
     }
 
+  function _glfwSetWindowPos(winid, x, y) {
+      GLFW.setWindowPos(winid, x, y);
+    }
+
   function _glfwSetWindowSize(winid, width, height) {
       GLFW.setWindowSize(winid, width, height);
     }
@@ -8762,6 +8766,7 @@ var asmLibraryArg = {
   "glfwSetKeyCallback": _glfwSetKeyCallback,
   "glfwSetMouseButtonCallback": _glfwSetMouseButtonCallback,
   "glfwSetScrollCallback": _glfwSetScrollCallback,
+  "glfwSetWindowPos": _glfwSetWindowPos,
   "glfwSetWindowSize": _glfwSetWindowSize,
   "glfwSwapBuffers": _glfwSwapBuffers,
   "glfwTerminate": _glfwTerminate,
@@ -9069,6 +9074,7 @@ unexportedRuntimeFunction('GLEW', false);
 unexportedRuntimeFunction('IDBStore', false);
 unexportedRuntimeFunction('runAndAbortIfError', false);
 unexportedRuntimeFunction('emscriptenWebGLGetIndexed', false);
+unexportedRuntimeFunction('WebXR', false);
 unexportedRuntimeSymbol('ALLOC_NORMAL', false);
 unexportedRuntimeSymbol('ALLOC_STACK', false);
 
