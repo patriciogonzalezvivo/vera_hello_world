@@ -2,10 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>ADA EXAMPLE</title>
+    <title>VERA EXAMPLE</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta property="og:image" content="thumbnail.png" />
-    <meta property="og:title" content="ADA EXAMPLE: Hello 3D World" />
+    <meta property="og:title" content="VERA, Hello World example" />
     <meta property='og:description' content='by Patricio Gonzalez Vivo'/>
     <meta property='og:image:width' content='512'/>
     <meta property='og:image:height' content='512'/>
@@ -365,15 +365,28 @@
             text-align: center;
             color: red;
         }
+
+        #xr-button {
+          display: block;
+          position: fixed;
+          bottom: 0px;
+          right: 0px;
+          width: 100px;
+          padding: 10px;
+          visibility: hidden;
+        }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-polyfill/6.23.0/polyfill.min.js"></script>
     <script src="https://finom.github.io/github-embed/github-embed.min.js"></script>
   </head>
   <body>
-    <!-- <script src="https://emgithub.com/embed.js?target=https%3A%2F%2Fgithub.com%2Fpatriciogonzalezvivo%2Fada_example3D%2Fblob%2Fmain%2Fsrc%2Fmain.cpp&style=github&showBorder=on&showLineNumbers=on&showFileMeta=on&showCopy=on"></script>   -->
+    <!-- <script src="https://emgithub.com/embed.js?target=https%3A%2F%2Fgithub.com%2Fpatriciogonzalezvivo%2Fvera_hello_world%2Fblob%2Fmain%2Fsrc%2Fmain.cpp&style=github&showBorder=on&showLineNumbers=on&showFileMeta=on&showCopy=on"></script>   -->
     <div class="code"></div>
     <canvas class='emscripten' id='canvas' oncontextmenu='event.preventDefault()' width="512px" height="512px" ></canvas>
+    <div>
+      <button id='xr-button' onclick="onRequestSession()">ENTER XR</button> 
+    </div>
     <div class='emscripten_loader' id='emscripten_loader'>
       <div class='emscripten_loader' id='spinner'></div>
       <div class='emscripten_loader' id='status'>Downloading...</div>
@@ -422,8 +435,8 @@
 
         githubEmbed('.code', {
           "owner": "patriciogonzalezvivo",
-            "repo": "ada_example3d",
-            "ref": "gh-pages",
+            "repo": "vera_hello_world",
+            "ref": "main",
           "embed": [{
             "path": "src/main.cpp"
           }]
@@ -464,5 +477,24 @@
       // location.reload();
     // };
   </script>
-  <script async type="text/javascript" src="hello_3d_world.js"></script>
+  <script async type="text/javascript" src="hello_world.js"></script>
+  <script>
+    var xrButton = document.getElementById("xr-button");
+    if (navigator.xr) {
+      xrButton.style.visibility = "visible";
+      navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        if (supported)
+          xrButton.textContent = "ENTER VR"
+      });
+
+      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        if (supported)
+          xrButton.textContent = "ENTER AR"
+      });
+    }
+
+    function onRequestSession() {
+      Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']);
+    }
+  </script>
 </html>
