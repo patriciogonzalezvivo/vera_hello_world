@@ -1,15 +1,14 @@
 cmake_minimum_required(VERSION 3.2)
 
 project(hello_world LANGUAGES CXX)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_compile_options(-DGLM_FORCE_CXX14 -DEVENTS_AS_CALLBACKS -DGLM_FORCE_SWIZZLE -Wno-psabi)
+add_compile_options(-DGLM_FORCE_CXX11 -DGLM_FORCE_SWIZZLE -Wno-psabi)
 
 # The compiled VERA 
 add_subdirectory(deps)
-target_compile_definitions(vera PUBLIC EVENTS_AS_CALLBACKS)
 
 file(GLOB ROOT_SOURCE 
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
@@ -20,8 +19,9 @@ add_executable(hello_world
 )
 
 set_target_properties(hello_world PROPERTIES
-    CXX_STANDARD 14
+    CXX_STANDARD 11
     CXX_STANDARD_REQUIRED ON
+    CMAKE_CXX_EXTENSIONS OFF
 )
 
 # copy all files on assets on the build folder
