@@ -29,8 +29,8 @@ file(COPY   assets/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR} )
 
 if (EMSCRIPTEN)
 
-    # create a hello_world.html 
-    set_target_properties(hello_world PROPERTIES SUFFIX ".html")
+    # # create a hello_world.html 
+    # set_target_properties(hello_world PROPERTIES SUFFIX ".html")
 
     # copy the index.html 
     file(COPY   assets/wasm/index.html DESTINATION ${CMAKE_CURRENT_BINARY_DIR} )

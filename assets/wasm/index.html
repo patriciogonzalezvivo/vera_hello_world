@@ -374,6 +374,7 @@
           width: 100px;
           padding: 10px;
           visibility: hidden;
+          z-index: 100;
         }
     </style>
 
@@ -478,23 +479,26 @@
     // };
   </script>
   <script async type="text/javascript" src="hello_world.js"></script>
-  <script>
+  <script type="module">
+    import WebXRPolyfill from './webxr-polyfill.module.js';
+    let polyfill = new WebXRPolyfill();
+
     var xrButton = document.getElementById("xr-button");
-    if (navigator.xr) {
-      xrButton.style.visibility = "visible";
-      navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-        if (supported)
-          xrButton.textContent = "ENTER VR"
+    if ("xr" in window.navigator) {
+      window.navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        if (supported) {
+          xrButton.style.visibility = "visible";
+          xrButton.textContent = "ENTER VR";
+          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']); }
+        }
       });
-
-      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-        if (supported)
+      window.navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        if (supported) {
+          xrButton.style.visibility = "visible";
           xrButton.textContent = "ENTER AR"
+          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']); }
+        }
       });
-    }
-
-    function onRequestSession() {
-      Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']);
     }
   </script>
 </html>
