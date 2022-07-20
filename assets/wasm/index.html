@@ -474,14 +474,6 @@
         }
     };
     Module.setStatus('Downloading...');
-    // window.onerror = function(event) {
-      // location.reload();
-    // };
-  </script>
-  <script async type="text/javascript" src="hello_world.js"></script>
-  <script type="module">
-    import WebXRPolyfill from './webxr-polyfill.module.js';
-    let polyfill = new WebXRPolyfill();
 
     var xrButton = document.getElementById("xr-button");
     if ("xr" in window.navigator) {
@@ -501,4 +493,8 @@
       });
     }
   </script>
+
+  <script async type="text/javascript" src="hello_world.js"></script>
+
+    
 </html>

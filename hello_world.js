@@ -195,7 +195,7 @@ var Module = typeof Module != 'undefined' ? Module : {};
     }
 
     }
-    loadPackage({"files": [{"filename": "/earth-water.png", "start": 0, "end": 117691}], "remote_package_size": 117691, "package_uuid": "0234ecec-106e-4139-9c3d-c3a00abcb199"});
+    loadPackage({"files": [{"filename": "/earth-water.png", "start": 0, "end": 117691}], "remote_package_size": 117691, "package_uuid": "c2a4acfc-5a15-4c5f-b850-b6e171b7eb85"});
 
   })();
 
@@ -888,13 +888,37 @@ function ccall(ident, returnType, argTypes, args, opts) {
       }
     }
   }
+  // Data for a previous async operation that was in flight before us.
+  var previousAsync = Asyncify.currData;
   var ret = func.apply(null, cArgs);
   function onDone(ret) {
+    runtimeKeepalivePop();
     if (stack !== 0) stackRestore(stack);
     return convertReturnValue(ret);
   }
+  // Keep the runtime alive through all calls. Note that this call might not be
+  // async, but for simplicity we push and pop in all calls.
+  runtimeKeepalivePush();
+  var asyncMode = opts && opts.async;
+  if (Asyncify.currData != previousAsync) {
+    // A change in async operation happened. If there was already an async
+    // operation in flight before us, that is an error: we should not start
+    // another async operation while one is active, and we should not stop one
+    // either. The only valid combination is to have no change in the async
+    // data (so we either had one in flight and left it alone, or we didn't have
+    // one), or to have nothing in flight and to start one.
+    assert(!(previousAsync && Asyncify.currData), 'We cannot start an async operation when one is already flight');
+    assert(!(previousAsync && !Asyncify.currData), 'We cannot stop an async operation in flight');
+    // This is a new async operation. The wasm is paused and has unwound its stack.
+    // We need to return a Promise that resolves the return value
+    // once the stack is rewound and execution finishes.
+    assert(asyncMode, 'The call to ' + ident + ' is running asynchronously. If this was intended, add the async option to the ccall/cwrap call.');
+    return Asyncify.whenDone().then(onDone);
+  }
 
   ret = onDone(ret);
+  // If this is an async ccall, ensure we return a promise
+  if (asyncMode) return Promise.resolve(ret);
   return ret;
 }
 
@@ -1749,6 +1773,8 @@ function createWasm() {
   function receiveInstance(instance, module) {
     var exports = instance.exports;
 
+    exports = Asyncify.instrumentWasmExports(exports);
+
     Module['asm'] = exports;
 
     wasmMemory = Module['asm']['memory'];
@@ -1845,6 +1871,7 @@ function createWasm() {
   if (Module['instantiateWasm']) {
     try {
       var exports = Module['instantiateWasm'](info, receiveInstance);
+      exports = Asyncify.instrumentWasmExports(exports);
       return exports;
     } catch(e) {
       err('Module.instantiateWasm callback failed with error: ' + e);
@@ -1884,11 +1911,11 @@ var ASM_CONSTS = {
             // Run the wasm function ptr with signature 'v'. If no function
             // with such signature was exported, this call does not need
             // to be emitted (and would confuse Closure)
-            getWasmTableEntry(func)();
+            (function() {  dynCall_v.call(null, func); })();
           } else {
             // If any function with signature 'vi' was exported, run
             // the callback with that signature.
-            getWasmTableEntry(func)(callback.arg);
+            (function(a1) {  dynCall_vi.apply(null, [func, a1]); })(callback.arg);
           }
         } else {
           func(callback.arg === undefined ? null : callback.arg);
@@ -4836,7 +4863,7 @@ var ASM_CONSTS = {
 
   function _emscripten_request_animation_frame_loop(cb, userData) {
       function tick(timeStamp) {
-        if (getWasmTableEntry(cb)(timeStamp, userData)) {
+        if ((function(a1, a2) { return dynCall_idi.apply(null, [cb, a1, a2]); })(timeStamp, userData)) {
           requestAnimationFrame(tick);
         }
       }
@@ -4953,7 +4980,7 @@ var ASM_CONSTS = {
         // TODO: Make this access thread safe, or this could update live while app is reading it.
         fillMouseEventData(JSEvents.mouseEvent, e, target);
   
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, JSEvents.mouseEvent, userData)) e.preventDefault();
+        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, JSEvents.mouseEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -5010,7 +5037,7 @@ var ASM_CONSTS = {
         HEAP32[(((uiEvent)+(24))>>2)] = outerHeight;
         HEAP32[(((uiEvent)+(28))>>2)] = pageXOffset;
         HEAP32[(((uiEvent)+(32))>>2)] = pageYOffset;
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, uiEvent, userData)) e.preventDefault();
+        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, uiEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -5089,7 +5116,7 @@ var ASM_CONSTS = {
         }
         HEAP32[(((touchEvent)+(8))>>2)] = numTouches;
   
-        if (getWasmTableEntry(callbackfunc)(eventTypeId, touchEvent, userData)) e.preventDefault();
+        if ((function(a1, a2, a3) { return dynCall_iiii.apply(null, [callbackfunc, a1, a2, a3]); })(eventTypeId, touchEvent, userData)) e.preventDefault();
       };
   
       var eventHandler = {
@@ -7319,7 +7346,7 @@ var ASM_CONSTS = {
         var charCode = event.charCode;
         if (charCode == 0 || (charCode >= 0x00 && charCode <= 0x1F)) return;
   
-        getWasmTableEntry(GLFW.active.charFunc)(GLFW.active.id, charCode);
+        (function(a1, a2) {  dynCall_vii.apply(null, [GLFW.active.charFunc, a1, a2]); })(GLFW.active.id, charCode);
       },onKeyChanged:function(keyCode, status) {
         if (!GLFW.active) return;
   
@@ -7332,7 +7359,7 @@ var ASM_CONSTS = {
         if (!GLFW.active.keyFunc) return;
   
         if (repeat) status = 2; // GLFW_REPEAT
-        getWasmTableEntry(GLFW.active.keyFunc)(GLFW.active.id, key, keyCode, status, GLFW.getModBits(GLFW.active));
+        (function(a1, a2, a3, a4, a5) {  dynCall_viiiii.apply(null, [GLFW.active.keyFunc, a1, a2, a3, a4, a5]); })(GLFW.active.id, key, keyCode, status, GLFW.getModBits(GLFW.active));
       },onGamepadConnected:function(event) {
         GLFW.refreshJoysticks();
       },onGamepadDisconnected:function(event) {
@@ -7363,7 +7390,7 @@ var ASM_CONSTS = {
   
         if (event.target != Module["canvas"] || !GLFW.active.cursorPosFunc) return;
   
-        getWasmTableEntry(GLFW.active.cursorPosFunc)(GLFW.active.id, Browser.mouseX, Browser.mouseY);
+        (function(a1, a2, a3) {  dynCall_vidd.apply(null, [GLFW.active.cursorPosFunc, a1, a2, a3]); })(GLFW.active.id, Browser.mouseX, Browser.mouseY);
       },DOMToGLFWMouseButton:function(event) {
         // DOM and glfw have different button codes.
         // See http://www.w3schools.com/jsref/event_button.asp.
@@ -7381,13 +7408,13 @@ var ASM_CONSTS = {
   
         if (event.target != Module["canvas"] || !GLFW.active.cursorEnterFunc) return;
   
-        getWasmTableEntry(GLFW.active.cursorEnterFunc)(GLFW.active.id, 1);
+        (function(a1, a2) {  dynCall_vii.apply(null, [GLFW.active.cursorEnterFunc, a1, a2]); })(GLFW.active.id, 1);
       },onMouseleave:function(event) {
         if (!GLFW.active) return;
   
         if (event.target != Module["canvas"] || !GLFW.active.cursorEnterFunc) return;
   
-        getWasmTableEntry(GLFW.active.cursorEnterFunc)(GLFW.active.id, 0);
+        (function(a1, a2) {  dynCall_vii.apply(null, [GLFW.active.cursorEnterFunc, a1, a2]); })(GLFW.active.id, 0);
       },onMouseButtonChanged:function(event, status) {
         if (!GLFW.active) return;
   
@@ -7408,7 +7435,7 @@ var ASM_CONSTS = {
   
         if (!GLFW.active.mouseButtonFunc) return;
   
-        getWasmTableEntry(GLFW.active.mouseButtonFunc)(GLFW.active.id, eventButton, status, GLFW.getModBits(GLFW.active));
+        (function(a1, a2, a3, a4) {  dynCall_viiii.apply(null, [GLFW.active.mouseButtonFunc, a1, a2, a3, a4]); })(GLFW.active.id, eventButton, status, GLFW.getModBits(GLFW.active));
       },onMouseButtonDown:function(event) {
         if (!GLFW.active) return;
         GLFW.onMouseButtonChanged(event, 1); // GLFW_PRESS
@@ -7431,7 +7458,7 @@ var ASM_CONSTS = {
           sx = event.deltaX;
         }
   
-        getWasmTableEntry(GLFW.active.scrollFunc)(GLFW.active.id, sx, sy);
+        (function(a1, a2, a3) {  dynCall_vidd.apply(null, [GLFW.active.scrollFunc, a1, a2, a3]); })(GLFW.active.id, sx, sy);
   
         event.preventDefault();
       },onCanvasResize:function(width, height) {
@@ -7482,7 +7509,7 @@ var ASM_CONSTS = {
   
         callUserCallback(function() {
   
-          getWasmTableEntry(GLFW.active.windowSizeFunc)(GLFW.active.id, GLFW.active.width, GLFW.active.height);
+          (function(a1, a2, a3) {  dynCall_viii.apply(null, [GLFW.active.windowSizeFunc, a1, a2, a3]); })(GLFW.active.id, GLFW.active.width, GLFW.active.height);
         });
       },onFramebufferSizeChanged:function() {
         if (!GLFW.active) return;
@@ -7490,7 +7517,7 @@ var ASM_CONSTS = {
         if (!GLFW.active.framebufferSizeFunc) return;
   
         callUserCallback(function() {
-          getWasmTableEntry(GLFW.active.framebufferSizeFunc)(GLFW.active.id, GLFW.active.width, GLFW.active.height);
+          (function(a1, a2, a3) {  dynCall_viii.apply(null, [GLFW.active.framebufferSizeFunc, a1, a2, a3]); })(GLFW.active.id, GLFW.active.width, GLFW.active.height);
         });
       },getTime:function() {
         return _emscripten_get_now() / 1000;
@@ -7526,7 +7553,7 @@ var ASM_CONSTS = {
                 };
   
                 if (GLFW.joystickFunc) {
-                  getWasmTableEntry(GLFW.joystickFunc)(joy, 0x00040001); // GLFW_CONNECTED
+                  (function(a1, a2) {  dynCall_vii.apply(null, [GLFW.joystickFunc, a1, a2]); })(joy, 0x00040001); // GLFW_CONNECTED
                 }
               }
   
@@ -7544,7 +7571,7 @@ var ASM_CONSTS = {
                 out('glfw joystick disconnected',joy);
   
                 if (GLFW.joystickFunc) {
-                  getWasmTableEntry(GLFW.joystickFunc)(joy, 0x00040002); // GLFW_DISCONNECTED
+                  (function(a1, a2) {  dynCall_vii.apply(null, [GLFW.joystickFunc, a1, a2]); })(joy, 0x00040002); // GLFW_DISCONNECTED
                 }
   
                 _free(GLFW.joys[joy].id);
@@ -7620,7 +7647,7 @@ var ASM_CONSTS = {
             var data = e.target.result;
             FS.writeFile(path, new Uint8Array(data));
             if (++written === count) {
-              getWasmTableEntry(GLFW.active.dropFunc)(GLFW.active.id, count, filenames);
+              (function(a1, a2, a3) {  dynCall_viii.apply(null, [GLFW.active.dropFunc, a1, a2, a3]); })(GLFW.active.id, count, filenames);
   
               for (var i = 0; i < filenamesArray.length; ++i) {
                 _free(filenamesArray[i]);
@@ -7783,7 +7810,7 @@ var ASM_CONSTS = {
   
         if (!win.windowSizeFunc) return;
   
-        getWasmTableEntry(win.windowSizeFunc)(win.id, width, height);
+        (function(a1, a2, a3) {  dynCall_viii.apply(null, [win.windowSizeFunc, a1, a2, a3]); })(win.id, width, height);
       },createWindow:function(width, height, title, monitor, share) {
         var i, id;
         for (i = 0; i < GLFW.windows.length && GLFW.windows[i] !== null; i++) {
@@ -7842,7 +7869,7 @@ var ASM_CONSTS = {
         if (!win) return;
   
         if (win.windowCloseFunc)
-          getWasmTableEntry(win.windowCloseFunc)(win.id);
+          (function(a1) {  dynCall_vi.apply(null, [win.windowCloseFunc, a1]); })(win.id);
   
         GLFW.windows[win.id - 1] = null;
         if (GLFW.active.id == win.id)
@@ -8359,6 +8386,514 @@ var ASM_CONSTS = {
       return _strftime(s, maxsize, format, tm); // no locale support yet
     }
 
+  function dynCallLegacy(sig, ptr, args) {
+      assert(('dynCall_' + sig) in Module, 'bad function pointer type - no table for sig \'' + sig + '\'');
+      if (args && args.length) {
+        // j (64-bit integer) must be passed in as two numbers [low 32, high 32].
+        assert(args.length === sig.substring(1).replace(/j/g, '--').length);
+      } else {
+        assert(sig.length == 1);
+      }
+      var f = Module["dynCall_" + sig];
+      return args && args.length ? f.apply(null, [ptr].concat(args)) : f.call(null, ptr);
+    }
+  /** @param {Object=} args */
+  function dynCall(sig, ptr, args) {
+      return dynCallLegacy(sig, ptr, args);
+    }
+  
+  var WebXR = {refSpaces:{},_curRAF:null,_nativize_vec3:function(offset, vec) {
+          setValue(offset + 0, vec.x, 'float');
+          setValue(offset + 4, vec.y, 'float');
+          setValue(offset + 8, vec.z, 'float');
+  
+          return offset + 12;
+      },_nativize_vec4:function(offset, vec) {
+          WebXR._nativize_vec3(offset, vec);
+          setValue(offset + 12, vec.w, 'float');
+  
+          return offset + 16;
+      },_nativize_matrix:function(offset, mat) {
+          for (var i = 0; i < 16; ++i) {
+              setValue(offset + i*4, mat[i], 'float');
+          }
+  
+          return offset + 16*4;
+      },_nativize_rigid_transform:function(offset, t) {
+          offset = WebXR._nativize_matrix(offset, t.matrix);
+          offset = WebXR._nativize_vec3(offset, t.position);
+          offset = WebXR._nativize_vec4(offset, t.orientation);
+  
+          return offset;
+      },_nativize_input_source:function(offset, inputSource, id) {
+          var handedness = -1;
+          if(inputSource.handedness == "left") handedness = 0;
+          else if(inputSource.handedness == "right") handedness = 1;
+  
+          var targetRayMode = 0;
+          if(inputSource.targetRayMode == "tracked-pointer") targetRayMode = 1;
+          else if(inputSource.targetRayMode == "screen") targetRayMode = 2;
+  
+          setValue(offset, id, 'i32');
+          offset +=4;
+          setValue(offset, handedness, 'i32');
+          offset +=4;
+          setValue(offset, targetRayMode, 'i32');
+          offset +=4;
+  
+          return offset;
+      },_set_input_callback__deps:["$dynCall"],_set_input_callback:function(event, callback, userData) {
+          var s = Module['webxr_session'];
+          if(!s) return;
+          if(!callback) return;
+  
+          s.addEventListener(event, function(e) {
+              /* Nativize input source */
+              var inputSource = Module._malloc(8); /* 2*sizeof(int32) */
+              WebXR._nativize_input_source(inputSource, e.inputSource, i);
+  
+              /* Call native callback */
+              dynCall('vii', callback, [inputSource, userData]);
+  
+              _free(inputSource);
+          });
+      },_set_session_callback__deps:["$dynCall"],_set_session_callback:function(event, callback, userData) {
+          var s = Module['webxr_session'];
+          if(!s) return;
+          if(!callback) return;
+  
+          s.addEventListener(event, function() {
+              dynCall('vi', callback, [userData]);
+          });
+      }};
+  function _webxr_init(frameCallback, startSessionCallback, endSessionCallback, errorCallback, userData) {
+      function onError(errorCode) {
+          if(!errorCallback) return;
+          dynCall('vii', errorCallback, [userData, errorCode]);
+      };
+  
+      function onSessionEnd(mode) {
+          if(!endSessionCallback) return;
+          mode = {'inline': 0, 'immersive-vr': 1, 'immersive-ar': 2}[mode];
+          dynCall('vii', endSessionCallback, [userData, mode]);
+      };
+  
+      function onSessionStart(mode) {
+          if(!startSessionCallback) return;
+          mode = {'inline': 0, 'immersive-vr': 1, 'immersive-ar': 2}[mode];
+          dynCall('vii', startSessionCallback, [userData, mode]);
+      };
+  
+      const SIZE_OF_WEBXR_VIEW = (16 + 3 + 4 + 16 + 4)*4;
+      const views = Module._malloc(SIZE_OF_WEBXR_VIEW*2 + (16 + 4 + 3)*4);
+  
+      function onFrame(time, frame) {
+          if(!frameCallback) return;
+          /* Request next frame */
+          const session = frame.session;
+          /* RAF is set to null on session end to avoid rendering */
+          if(Module['webxr_session'] != null) session.requestAnimationFrame(onFrame);
+  
+          const pose = frame.getViewerPose(WebXR.refSpaces[WebXR.refSpace]);
+          if(!pose) return;
+  
+          const glLayer = session.renderState.baseLayer;
+          pose.views.forEach(function(view) {
+              const viewport = glLayer.getViewport(view);
+              let offset = views + SIZE_OF_WEBXR_VIEW*(view.eye == 'right' ? 1 : 0);
+              offset = WebXR._nativize_rigid_transform(offset, view.transform);
+              offset = WebXR._nativize_matrix(offset, view.projectionMatrix);
+  
+              setValue(offset + 0, viewport.x, 'i32');
+              setValue(offset + 4, viewport.y, 'i32');
+              setValue(offset + 8, viewport.width, 'i32');
+              setValue(offset + 12, viewport.height, 'i32');
+          });
+  
+          /* Model matrix */
+          const modelMatrix = views + SIZE_OF_WEBXR_VIEW*2;
+          WebXR._nativize_rigid_transform(modelMatrix, pose.transform);
+  
+          /* If framebuffer is non-null, compositor is enabled and we bind it.
+              * If it's null, we need to avoid this call otherwise the canvas FBO is bound */
+          if(glLayer.framebuffer) {
+              /* Make sure that FRAMEBUFFER_BINDING returns a valid value.
+                  * For that we create an id in the emscripten object tables
+                  * and add the frambuffer */
+              const id = Module.webxr_fbo || GL.getNewId(GL.framebuffers);
+              glLayer.framebuffer.name = id;
+              GL.framebuffers[id] = glLayer.framebuffer;
+              Module.webxr_fbo = id;
+              Module.ctx.bindFramebuffer(Module.ctx.FRAMEBUFFER, glLayer.framebuffer);
+          }
+  
+          /* Set and reset environment for webxr_get_input_pose calls */
+          Module['webxr_frame'] = frame;
+          dynCall('viiiii', frameCallback, [userData, time, modelMatrix, views, pose.views.length]);
+          Module['webxr_frame'] = null;
+      };
+  
+      function onSessionStarted(session, mode) {
+          Module['webxr_session'] = session;
+  
+          // React to session ending
+          session.addEventListener('end', function() {
+              Module['webxr_session'].cancelAnimationFrame(WebXR._curRAF);
+              WebXR._curRAF = null;
+              Module['webxr_session'] = null;
+              onSessionEnd(mode);
+          });
+  
+          // Ensure our context can handle WebXR rendering
+          Module.ctx.makeXRCompatible().then(function() {
+              // Create the base layer
+              const layer = Module['webxr_baseLayer'] = new window.XRWebGLLayer(session, Module.ctx, {
+                  framebufferScaleFactor: Module['webxr_framebuffer_scale_factor'],
+              });
+              session.updateRenderState({ baseLayer: layer });
+  
+              /* 'viewer' reference space is always available. local-floor*/
+              session.requestReferenceSpace('local-floor').then(refSpace => {
+                  WebXR.refSpaces['local-floor'] = refSpace;
+  
+                  WebXR.refSpace = 'local-floor';
+  
+                  // Give application a chance to react to session starting
+                  // e.g. finish current desktop frame.
+                  onSessionStart(mode);
+                  console.log("created local-floor reference space");
+                  // Start rendering
+                  session.requestAnimationFrame(onFrame);
+              }, (e) => {
+                  session.requestReferenceSpace('local').then(refSpace => {
+                      WebXR.refSpaces['local'] = refSpace;
+      
+                      WebXR.refSpace = 'local';
+      
+                      // Give application a chance to react to session starting
+                      // e.g. finish current desktop frame.
+                      onSessionStart(mode);
+                      console.log("created local reference space");
+                      // Start rendering
+                      session.requestAnimationFrame(onFrame);
+                  }, (e) =>{
+                      session.requestReferenceSpace('viewer').then(refSpace => {
+                          WebXR.refSpaces['viewer'] = refSpace;
+          
+                          WebXR.refSpace = 'viewer';
+          
+                          // Give application a chance to react to session starting
+                          // e.g. finish current desktop frame.
+                          onSessionStart(mode);
+                          console.log("created viewer reference space");
+                          // Start rendering
+                          session.requestAnimationFrame(onFrame);
+                      });
+                  });
+              });
+  
+              /* Request and cache other available spaces, which may not be available */
+              for(const s of ['local', 'local-floor', 'bounded-floor', 'unbounded']) {
+                  session.requestReferenceSpace(s).then(refSpace => {
+                      /* We prefer the reference space automatically in above order */
+                      WebXR.refSpace = s;
+  
+                      WebXR.refSpaces[s] = refSpace;
+                  }, function() { /* Leave refSpaces[s] unset. */ })
+              }
+          }, function() {
+              onError(-3);
+          });
+      };
+  
+      if(navigator.xr) {
+          Module['webxr_request_session_func'] = function(mode, requiredFeatures, optionalFeatures) {
+              if(typeof(mode) !== 'string') {
+                  mode = (['inline', 'immersive-vr', 'immersive-ar'])[mode];
+              }
+  
+              let toFeatureList = function(bitMask) {
+                  const f = [];
+                  const features = ['local', 'local-floor', 'bounded-floor', 'unbounded', 'hit-test'];
+                  for(let i = 0; i < features.length; ++i) {
+                      if((bitMask & (1 << i)) != 0) {
+                          f.push(features[i]);
+                      }
+                  }
+                  return features;
+              };
+              if(typeof(requiredFeatures) === 'number') {
+                  requiredFeatures = toFeatureList(requiredFeatures);
+              }
+              if(typeof(optionalFeatures) === 'number') {
+                  optionalFeatures = toFeatureList(optionalFeatures);
+              }
+              navigator.xr.requestSession(mode, {
+                  requiredFeatures: requiredFeatures,
+                  optionalFeatures: optionalFeatures
+              }).then(function(s) {
+                  onSessionStarted(s, mode);
+              }).catch(console.error);
+          };
+      } else {
+          /* Call error callback with "WebXR not supported" */
+          onError(-2);
+      }
+  }
+
+  function _webxr_is_session_supported(mode, callback) {
+      if(!navigator.xr) {
+          /* WebXR not supported at all */
+          dynCall('vii', callback, [mode, 0]);
+          return;
+      }
+      
+      navigator.xr.isSessionSupported( (['inline', 'immersive-vr', 'immersive-ar'])[mode] ).then(function(supported) {
+          if (supported)
+              dynCall('vii', callback, [mode, 1]);
+          else
+              dynCall('vii', callback, [mode, 0]);
+      });
+  }
+
+  function _webxr_request_session(mode) {
+      var s = Module['webxr_request_session_func'];
+      if(s) s(mode);
+  }
+
+  function _webxr_set_projection_params(near, far) {
+      var s = Module['webxr_session'];
+      if(!s) return;
+  
+      s.depthNear = near;
+      s.depthFar = far;
+  }
+
+
+  function runAndAbortIfError(func) {
+      try {
+        return func();
+      } catch (e) {
+        abort(e);
+      }
+    }
+  var Asyncify = {State:{Normal:0,Unwinding:1,Rewinding:2,Disabled:3},state:0,StackSize:4096,currData:null,handleSleepReturnValue:0,exportCallStack:[],callStackNameToId:{},callStackIdToName:{},callStackId:0,asyncPromiseHandlers:null,sleepCallbacks:[],getCallStackId:function(funcName) {
+        var id = Asyncify.callStackNameToId[funcName];
+        if (id === undefined) {
+          id = Asyncify.callStackId++;
+          Asyncify.callStackNameToId[funcName] = id;
+          Asyncify.callStackIdToName[id] = funcName;
+        }
+        return id;
+      },instrumentWasmImports:function(imports) {
+        var ASYNCIFY_IMPORTS = ["env.invoke_*","env.emscripten_sleep","env.emscripten_wget","env.emscripten_wget_data","env.emscripten_idb_load","env.emscripten_idb_store","env.emscripten_idb_delete","env.emscripten_idb_exists","env.emscripten_idb_load_blob","env.emscripten_idb_store_blob","env.SDL_Delay","env.emscripten_scan_registers","env.emscripten_lazy_load_code","env.emscripten_fiber_swap","wasi_snapshot_preview1.fd_sync","env.__wasi_fd_sync","env._emval_await","env._dlopen_js","env.__asyncjs__*"].map((x) => x.split('.')[1]);
+        for (var x in imports) {
+          (function(x) {
+            var original = imports[x];
+            var sig = original.sig;
+            if (typeof original == 'function') {
+              var isAsyncifyImport = ASYNCIFY_IMPORTS.indexOf(x) >= 0 ||
+                                     x.startsWith('__asyncjs__');
+              imports[x] = function() {
+                var originalAsyncifyState = Asyncify.state;
+                try {
+                  return original.apply(null, arguments);
+                } finally {
+                  // Only asyncify-declared imports are allowed to change the
+                  // state.
+                  // Changing the state from normal to disabled is allowed (in any
+                  // function) as that is what shutdown does (and we don't have an
+                  // explicit list of shutdown imports).
+                  var changedToDisabled =
+                        originalAsyncifyState === Asyncify.State.Normal &&
+                        Asyncify.state        === Asyncify.State.Disabled;
+                  // invoke_* functions are allowed to change the state if we do
+                  // not ignore indirect calls.
+                  var ignoredInvoke = x.startsWith('invoke_') &&
+                                      true;
+                  if (Asyncify.state !== originalAsyncifyState &&
+                      !isAsyncifyImport &&
+                      !changedToDisabled &&
+                      !ignoredInvoke) {
+                    throw new Error('import ' + x + ' was not in ASYNCIFY_IMPORTS, but changed the state');
+                  }
+                }
+              };
+            }
+          })(x);
+        }
+      },instrumentWasmExports:function(exports) {
+        var ret = {};
+        for (var x in exports) {
+          (function(x) {
+            var original = exports[x];
+            if (typeof original == 'function') {
+              ret[x] = function() {
+                Asyncify.exportCallStack.push(x);
+                try {
+                  return original.apply(null, arguments);
+                } finally {
+                  if (!ABORT) {
+                    var y = Asyncify.exportCallStack.pop();
+                    assert(y === x);
+                    Asyncify.maybeStopUnwind();
+                  }
+                }
+              };
+            } else {
+              ret[x] = original;
+            }
+          })(x);
+        }
+        return ret;
+      },maybeStopUnwind:function() {
+        if (Asyncify.currData &&
+            Asyncify.state === Asyncify.State.Unwinding &&
+            Asyncify.exportCallStack.length === 0) {
+          // We just finished unwinding.
+          
+          Asyncify.state = Asyncify.State.Normal;
+          // Keep the runtime alive so that a re-wind can be done later.
+          runAndAbortIfError(Module['_asyncify_stop_unwind']);
+          if (typeof Fibers != 'undefined') {
+            Fibers.trampoline();
+          }
+        }
+      },whenDone:function() {
+        assert(Asyncify.currData, 'Tried to wait for an async operation when none is in progress.');
+        assert(!Asyncify.asyncPromiseHandlers, 'Cannot have multiple async operations in flight at once');
+        return new Promise((resolve, reject) => {
+          Asyncify.asyncPromiseHandlers = {
+            resolve: resolve,
+            reject: reject
+          };
+        });
+      },allocateData:function() {
+        // An asyncify data structure has three fields:
+        //  0  current stack pos
+        //  4  max stack pos
+        //  8  id of function at bottom of the call stack (callStackIdToName[id] == name of js function)
+        //
+        // The Asyncify ABI only interprets the first two fields, the rest is for the runtime.
+        // We also embed a stack in the same memory region here, right next to the structure.
+        // This struct is also defined as asyncify_data_t in emscripten/fiber.h
+        var ptr = _malloc(12 + Asyncify.StackSize);
+        Asyncify.setDataHeader(ptr, ptr + 12, Asyncify.StackSize);
+        Asyncify.setDataRewindFunc(ptr);
+        return ptr;
+      },setDataHeader:function(ptr, stack, stackSize) {
+        HEAP32[((ptr)>>2)] = stack;
+        HEAP32[(((ptr)+(4))>>2)] = stack + stackSize;
+      },setDataRewindFunc:function(ptr) {
+        var bottomOfCallStack = Asyncify.exportCallStack[0];
+        var rewindId = Asyncify.getCallStackId(bottomOfCallStack);
+        HEAP32[(((ptr)+(8))>>2)] = rewindId;
+      },getDataRewindFunc:function(ptr) {
+        var id = HEAP32[(((ptr)+(8))>>2)];
+        var name = Asyncify.callStackIdToName[id];
+        var func = Module['asm'][name];
+        return func;
+      },doRewind:function(ptr) {
+        var start = Asyncify.getDataRewindFunc(ptr);
+        // Once we have rewound and the stack we no longer need to artificially
+        // keep the runtime alive.
+        
+        return start();
+      },handleSleep:function(startAsync) {
+        assert(Asyncify.state !== Asyncify.State.Disabled, 'Asyncify cannot be done during or after the runtime exits');
+        if (ABORT) return;
+        if (Asyncify.state === Asyncify.State.Normal) {
+          // Prepare to sleep. Call startAsync, and see what happens:
+          // if the code decided to call our callback synchronously,
+          // then no async operation was in fact begun, and we don't
+          // need to do anything.
+          var reachedCallback = false;
+          var reachedAfterCallback = false;
+          startAsync((handleSleepReturnValue) => {
+            assert(!handleSleepReturnValue || typeof handleSleepReturnValue == 'number' || typeof handleSleepReturnValue == 'boolean'); // old emterpretify API supported other stuff
+            if (ABORT) return;
+            Asyncify.handleSleepReturnValue = handleSleepReturnValue || 0;
+            reachedCallback = true;
+            if (!reachedAfterCallback) {
+              // We are happening synchronously, so no need for async.
+              return;
+            }
+            // This async operation did not happen synchronously, so we did
+            // unwind. In that case there can be no compiled code on the stack,
+            // as it might break later operations (we can rewind ok now, but if
+            // we unwind again, we would unwind through the extra compiled code
+            // too).
+            assert(!Asyncify.exportCallStack.length, 'Waking up (starting to rewind) must be done from JS, without compiled code on the stack.');
+            Asyncify.state = Asyncify.State.Rewinding;
+            runAndAbortIfError(() => Module['_asyncify_start_rewind'](Asyncify.currData));
+            if (typeof Browser != 'undefined' && Browser.mainLoop.func) {
+              Browser.mainLoop.resume();
+            }
+            var asyncWasmReturnValue, isError = false;
+            try {
+              asyncWasmReturnValue = Asyncify.doRewind(Asyncify.currData);
+            } catch (err) {
+              asyncWasmReturnValue = err;
+              isError = true;
+            }
+            // Track whether the return value was handled by any promise handlers.
+            var handled = false;
+            if (!Asyncify.currData) {
+              // All asynchronous execution has finished.
+              // `asyncWasmReturnValue` now contains the final
+              // return value of the exported async WASM function.
+              //
+              // Note: `asyncWasmReturnValue` is distinct from
+              // `Asyncify.handleSleepReturnValue`.
+              // `Asyncify.handleSleepReturnValue` contains the return
+              // value of the last C function to have executed
+              // `Asyncify.handleSleep()`, where as `asyncWasmReturnValue`
+              // contains the return value of the exported WASM function
+              // that may have called C functions that
+              // call `Asyncify.handleSleep()`.
+              var asyncPromiseHandlers = Asyncify.asyncPromiseHandlers;
+              if (asyncPromiseHandlers) {
+                Asyncify.asyncPromiseHandlers = null;
+                (isError ? asyncPromiseHandlers.reject : asyncPromiseHandlers.resolve)(asyncWasmReturnValue);
+                handled = true;
+              }
+            }
+            if (isError && !handled) {
+              // If there was an error and it was not handled by now, we have no choice but to
+              // rethrow that error into the global scope where it can be caught only by
+              // `onerror` or `onunhandledpromiserejection`.
+              throw asyncWasmReturnValue;
+            }
+          });
+          reachedAfterCallback = true;
+          if (!reachedCallback) {
+            // A true async operation was begun; start a sleep.
+            Asyncify.state = Asyncify.State.Unwinding;
+            // TODO: reuse, don't alloc/free every sleep
+            Asyncify.currData = Asyncify.allocateData();
+            if (typeof Browser != 'undefined' && Browser.mainLoop.func) {
+              Browser.mainLoop.pause();
+            }
+            runAndAbortIfError(() => Module['_asyncify_start_unwind'](Asyncify.currData));
+          }
+        } else if (Asyncify.state === Asyncify.State.Rewinding) {
+          // Stop a resume.
+          Asyncify.state = Asyncify.State.Normal;
+          runAndAbortIfError(Module['_asyncify_stop_rewind']);
+          _free(Asyncify.currData);
+          Asyncify.currData = null;
+          // Call all sleep callbacks now that the sleep-resume is all done.
+          Asyncify.sleepCallbacks.forEach((func) => callUserCallback(func));
+        } else {
+          abort('invalid state: ' + Asyncify.state);
+        }
+        return Asyncify.handleSleepReturnValue;
+      },handleAsync:function(startAsync) {
+        return Asyncify.handleSleep((wakeUp) => {
+          // TODO: add error handling as a second param when handleSleep implements it.
+          startAsync().then(wakeUp);
+        });
+      }};
 
   var FSNode = /** @constructor */ function(parent, name, mode, rdev) {
     if (!parent) {
@@ -8772,8 +9307,13 @@ var asmLibraryArg = {
   "glfwTerminate": _glfwTerminate,
   "glfwWindowHint": _glfwWindowHint,
   "setTempRet0": _setTempRet0,
-  "strftime_l": _strftime_l
+  "strftime_l": _strftime_l,
+  "webxr_init": _webxr_init,
+  "webxr_is_session_supported": _webxr_is_session_supported,
+  "webxr_request_session": _webxr_request_session,
+  "webxr_set_projection_params": _webxr_set_projection_params
 };
+Asyncify.instrumentWasmImports(asmLibraryArg);
 var asm = createWasm();
 /** @type {function(...*):?} */
 var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__wasm_call_ctors");
@@ -8796,6 +9336,11 @@ var _fflush = Module["_fflush"] = createExportWrapper("fflush");
 /** @type {function(...*):?} */
 var _emscripten_stack_init = Module["_emscripten_stack_init"] = function() {
   return (_emscripten_stack_init = Module["_emscripten_stack_init"] = Module["asm"]["emscripten_stack_init"]).apply(null, arguments);
+};
+
+/** @type {function(...*):?} */
+var _emscripten_stack_set_limits = Module["_emscripten_stack_set_limits"] = function() {
+  return (_emscripten_stack_set_limits = Module["_emscripten_stack_set_limits"] = Module["asm"]["emscripten_stack_set_limits"]).apply(null, arguments);
 };
 
 /** @type {function(...*):?} */
@@ -8826,7 +9371,103 @@ var stackAlloc = Module["stackAlloc"] = createExportWrapper("stackAlloc");
 var ___cxa_is_pointer_type = Module["___cxa_is_pointer_type"] = createExportWrapper("__cxa_is_pointer_type");
 
 /** @type {function(...*):?} */
+var dynCall_vi = Module["dynCall_vi"] = createExportWrapper("dynCall_vi");
+
+/** @type {function(...*):?} */
+var dynCall_ii = Module["dynCall_ii"] = createExportWrapper("dynCall_ii");
+
+/** @type {function(...*):?} */
+var dynCall_viii = Module["dynCall_viii"] = createExportWrapper("dynCall_viii");
+
+/** @type {function(...*):?} */
+var dynCall_vii = Module["dynCall_vii"] = createExportWrapper("dynCall_vii");
+
+/** @type {function(...*):?} */
+var dynCall_viff = Module["dynCall_viff"] = createExportWrapper("dynCall_viff");
+
+/** @type {function(...*):?} */
+var dynCall_viffi = Module["dynCall_viffi"] = createExportWrapper("dynCall_viffi");
+
+/** @type {function(...*):?} */
+var dynCall_vif = Module["dynCall_vif"] = createExportWrapper("dynCall_vif");
+
+/** @type {function(...*):?} */
+var dynCall_idi = Module["dynCall_idi"] = createExportWrapper("dynCall_idi");
+
+/** @type {function(...*):?} */
+var dynCall_viiiii = Module["dynCall_viiiii"] = createExportWrapper("dynCall_viiiii");
+
+/** @type {function(...*):?} */
+var dynCall_iii = Module["dynCall_iii"] = createExportWrapper("dynCall_iii");
+
+/** @type {function(...*):?} */
+var dynCall_v = Module["dynCall_v"] = createExportWrapper("dynCall_v");
+
+/** @type {function(...*):?} */
+var dynCall_viiii = Module["dynCall_viiii"] = createExportWrapper("dynCall_viiii");
+
+/** @type {function(...*):?} */
+var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
+
+/** @type {function(...*):?} */
+var dynCall_vidd = Module["dynCall_vidd"] = createExportWrapper("dynCall_vidd");
+
+/** @type {function(...*):?} */
+var dynCall_iiiii = Module["dynCall_iiiii"] = createExportWrapper("dynCall_iiiii");
+
+/** @type {function(...*):?} */
+var dynCall_iiiiii = Module["dynCall_iiiiii"] = createExportWrapper("dynCall_iiiiii");
+
+/** @type {function(...*):?} */
+var dynCall_iiiiiiiii = Module["dynCall_iiiiiiiii"] = createExportWrapper("dynCall_iiiiiiiii");
+
+/** @type {function(...*):?} */
+var dynCall_iiiiiii = Module["dynCall_iiiiiii"] = createExportWrapper("dynCall_iiiiiii");
+
+/** @type {function(...*):?} */
+var dynCall_viiiiii = Module["dynCall_viiiiii"] = createExportWrapper("dynCall_viiiiii");
+
+/** @type {function(...*):?} */
+var dynCall_fi = Module["dynCall_fi"] = createExportWrapper("dynCall_fi");
+
+/** @type {function(...*):?} */
+var dynCall_vifffi = Module["dynCall_vifffi"] = createExportWrapper("dynCall_vifffi");
+
+/** @type {function(...*):?} */
+var dynCall_vid = Module["dynCall_vid"] = createExportWrapper("dynCall_vid");
+
+/** @type {function(...*):?} */
+var dynCall_vifiif = Module["dynCall_vifiif"] = createExportWrapper("dynCall_vifiif");
+
+/** @type {function(...*):?} */
+var dynCall_vifff = Module["dynCall_vifff"] = createExportWrapper("dynCall_vifff");
+
+/** @type {function(...*):?} */
+var dynCall_viiiiiii = Module["dynCall_viiiiiii"] = createExportWrapper("dynCall_viiiiiii");
+
+/** @type {function(...*):?} */
+var dynCall_iiiiiiiiii = Module["dynCall_iiiiiiiiii"] = createExportWrapper("dynCall_iiiiiiiiii");
+
+/** @type {function(...*):?} */
+var dynCall_viffff = Module["dynCall_viffff"] = createExportWrapper("dynCall_viffff");
+
+/** @type {function(...*):?} */
+var dynCall_viiiff = Module["dynCall_viiiff"] = createExportWrapper("dynCall_viiiff");
+
+/** @type {function(...*):?} */
+var dynCall_viiff = Module["dynCall_viiff"] = createExportWrapper("dynCall_viiff");
+
+/** @type {function(...*):?} */
+var dynCall_fii = Module["dynCall_fii"] = createExportWrapper("dynCall_fii");
+
+/** @type {function(...*):?} */
+var dynCall_viif = Module["dynCall_viif"] = createExportWrapper("dynCall_viif");
+
+/** @type {function(...*):?} */
 var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
+
+/** @type {function(...*):?} */
+var dynCall_iidiiii = Module["dynCall_iidiiii"] = createExportWrapper("dynCall_iidiiii");
 
 /** @type {function(...*):?} */
 var dynCall_viijii = Module["dynCall_viijii"] = createExportWrapper("dynCall_viijii");
@@ -8835,10 +9476,28 @@ var dynCall_viijii = Module["dynCall_viijii"] = createExportWrapper("dynCall_vii
 var dynCall_iiiiij = Module["dynCall_iiiiij"] = createExportWrapper("dynCall_iiiiij");
 
 /** @type {function(...*):?} */
+var dynCall_iiiiid = Module["dynCall_iiiiid"] = createExportWrapper("dynCall_iiiiid");
+
+/** @type {function(...*):?} */
 var dynCall_iiiiijj = Module["dynCall_iiiiijj"] = createExportWrapper("dynCall_iiiiijj");
 
 /** @type {function(...*):?} */
+var dynCall_iiiiiiii = Module["dynCall_iiiiiiii"] = createExportWrapper("dynCall_iiiiiiii");
+
+/** @type {function(...*):?} */
 var dynCall_iiiiiijj = Module["dynCall_iiiiiijj"] = createExportWrapper("dynCall_iiiiiijj");
+
+/** @type {function(...*):?} */
+var _asyncify_start_unwind = Module["_asyncify_start_unwind"] = createExportWrapper("asyncify_start_unwind");
+
+/** @type {function(...*):?} */
+var _asyncify_stop_unwind = Module["_asyncify_stop_unwind"] = createExportWrapper("asyncify_stop_unwind");
+
+/** @type {function(...*):?} */
+var _asyncify_start_rewind = Module["_asyncify_start_rewind"] = createExportWrapper("asyncify_start_rewind");
+
+/** @type {function(...*):?} */
+var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrapper("asyncify_stop_rewind");
 
 
 
@@ -9073,6 +9732,8 @@ unexportedRuntimeFunction('GLFW', false);
 unexportedRuntimeFunction('GLEW', false);
 unexportedRuntimeFunction('IDBStore', false);
 unexportedRuntimeFunction('runAndAbortIfError', false);
+unexportedRuntimeFunction('Asyncify', false);
+unexportedRuntimeFunction('Fibers', false);
 unexportedRuntimeFunction('emscriptenWebGLGetIndexed', false);
 unexportedRuntimeFunction('WebXR', false);
 unexportedRuntimeSymbol('ALLOC_NORMAL', false);

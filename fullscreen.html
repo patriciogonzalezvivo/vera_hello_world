@@ -2,8 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>VERA EXAMPLE</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VERA FULLSCREEN EXAMPLE</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
     <meta property="og:image" content="thumbnail.png" />
     <meta property="og:title" content="VERA FULLSCREEN EXAMPLE" />
     <meta property='og:description' content='by Patricio Gonzalez Vivo'/>
@@ -33,7 +35,30 @@
         -webkit-touch-callout: none;
       }
 
-      .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+      .emscripten { 
+        padding-right: 0; 
+        margin-left: auto; 
+        margin-right: auto; 
+        display: block; 
+
+        position: relative;
+        top: 0px;
+        left: 0px;
+        margin: 0px;
+        border: 0;
+        /*width: 100%; //this will set canvas size full screen
+        height: 100%;*/
+        overflow: hidden;
+        display: block;
+        image-rendering: optimizeSpeed;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: -o-crisp-edges;
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: optimize-contrast;
+        image-rendering: crisp-edges;
+        image-rendering: pixelated;
+        -ms-interpolation-mode: nearest-neighbor;
+      }
       div.emscripten { text-align: center; }
       canvas.emscripten {
         position: absolute;
@@ -128,6 +153,16 @@
         background-size: cover;
       }
 
+      #xr-button {
+        display: block;
+        position: fixed;
+        bottom: 0px;
+        right: 0px;
+        width: 100px;
+        padding: 10px;
+        visibility: hidden;
+      }
+
     </style>
   </head>
   <body>
@@ -138,6 +173,9 @@
       <!-- <img src='thumbnail.gif' loop='infinite' id='emscripten_background'/> -->
     </div>
     <canvas class='emscripten' id='canvas' oncontextmenu='event.preventDefault()' tabindex=-1></canvas>
+    <div>
+      <button id='xr-button' onclick="onRequestSession()">ENTER XR</button> 
+    </div>
   </body>
 
   <script type='text/javascript'>
@@ -210,9 +248,25 @@
         }
     };
     Module.setStatus('Downloading...');
-    // window.onerror = function(event) {
-      // location.reload();
-    // };
+
+    var xrButton = document.getElementById("xr-button");
+    if ("xr" in window.navigator) {
+      window.navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        if (supported) {
+          xrButton.style.visibility = "visible";
+          xrButton.textContent = "ENTER VR";
+          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']); }
+        }
+      });
+      window.navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        if (supported) {
+          xrButton.style.visibility = "visible";
+          xrButton.textContent = "ENTER AR"
+          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-ar', ['local'], ['local']); }
+        }
+      });
+    }
   </script>
   <script async type="text/javascript" src="hello_world.js"></script>
+  
 </html>

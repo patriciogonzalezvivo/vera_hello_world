@@ -248,10 +248,6 @@
         }
     };
     Module.setStatus('Downloading...');
-  </script>
-  <script type="module">
-    import WebXRPolyfill from './webxr-polyfill.module.js';
-    let polyfill = new WebXRPolyfill();
 
     var xrButton = document.getElementById("xr-button");
     if ("xr" in window.navigator) {
@@ -266,7 +262,7 @@
         if (supported) {
           xrButton.style.visibility = "visible";
           xrButton.textContent = "ENTER AR"
-          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']); }
+          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-ar', ['local'], ['local']); }
         }
       });
     }

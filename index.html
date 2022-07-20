@@ -365,6 +365,17 @@
             text-align: center;
             color: red;
         }
+
+        #xr-button {
+          display: block;
+          position: fixed;
+          bottom: 0px;
+          right: 0px;
+          width: 100px;
+          padding: 10px;
+          visibility: hidden;
+          z-index: 100;
+        }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-polyfill/6.23.0/polyfill.min.js"></script>
@@ -374,6 +385,9 @@
     <!-- <script src="https://emgithub.com/embed.js?target=https%3A%2F%2Fgithub.com%2Fpatriciogonzalezvivo%2Fvera_hello_world%2Fblob%2Fmain%2Fsrc%2Fmain.cpp&style=github&showBorder=on&showLineNumbers=on&showFileMeta=on&showCopy=on"></script>   -->
     <div class="code"></div>
     <canvas class='emscripten' id='canvas' oncontextmenu='event.preventDefault()' width="512px" height="512px" ></canvas>
+    <div>
+      <button id='xr-button' onclick="onRequestSession()">ENTER XR</button> 
+    </div>
     <div class='emscripten_loader' id='emscripten_loader'>
       <div class='emscripten_loader' id='spinner'></div>
       <div class='emscripten_loader' id='status'>Downloading...</div>
@@ -460,9 +474,27 @@
         }
     };
     Module.setStatus('Downloading...');
-    // window.onerror = function(event) {
-      // location.reload();
-    // };
+
+    var xrButton = document.getElementById("xr-button");
+    if ("xr" in window.navigator) {
+      window.navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        if (supported) {
+          xrButton.style.visibility = "visible";
+          xrButton.textContent = "ENTER VR";
+          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']); }
+        }
+      });
+      window.navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        if (supported) {
+          xrButton.style.visibility = "visible";
+          xrButton.textContent = "ENTER AR"
+          xrButton.onclick = function() { Module['webxr_request_session_func']('immersive-vr', ['local'], ['local']); }
+        }
+      });
+    }
   </script>
+
   <script async type="text/javascript" src="hello_world.js"></script>
+
+    
 </html>

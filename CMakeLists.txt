@@ -36,7 +36,6 @@ if (EMSCRIPTEN)
     file(COPY   assets/wasm/index.html DESTINATION ${CMAKE_CURRENT_BINARY_DIR} )
     file(COPY   assets/wasm/fullscreen.html DESTINATION ${CMAKE_CURRENT_BINARY_DIR} )
     file(COPY   assets/wasm/thumbnail.png DESTINATION ${CMAKE_CURRENT_BINARY_DIR} )
-    file(COPY   assets/wasm/webxr-polyfill.module.js DESTINATION ${CMAKE_CURRENT_BINARY_DIR} )
 
     # set(LFLAGS "${LFLAGS} -pthread")
     set(LFLAGS "${LFLAGS} -s USE_PTHREADS=0")
