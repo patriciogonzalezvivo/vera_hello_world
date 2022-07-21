@@ -111,13 +111,11 @@ class VeraApp : public App {
         line(orbit);
 
         fill(1.0f);
-        if (xrMode == -1)
+        if (getXR() == NONE_XR_MODE)
             text("Hello World", width * 0.5f, height - 50.0f);
-        else if (xrMode == 0)
-            text("Hello INLINE World", width * 0.5f, height - 50.0f);
-        else if (xrMode == 1)
+        else if (getXR() == VR_MODE)
             text("Hello VR World", width * 0.5f, height - 50.0f);
-        else if (xrMode == 2)
+        else if (getXR() == AR_MODE)
             text("Hello AR World", width * 0.5f, height - 50.0f);
     }
 };
