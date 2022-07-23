@@ -48,7 +48,6 @@ class VeraApp : public App {
                 float shade = dot(v_normal, normalize(u_light));
                 shade = smoothstep(-0.25, 0.25, shade);
                 color *= 0.2 + shade * 0.8;
-                // color = normalize(u_light);
                 #endif
 
                 gl_FragColor = vec4(color, 1.);
