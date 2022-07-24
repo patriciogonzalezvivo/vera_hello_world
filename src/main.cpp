@@ -78,6 +78,14 @@ class VeraApp : public App {
         blendMode(BLEND_ALPHA);
     }
 
+    void update() {
+        if (frameCount%15 == 0) {
+            orbit.push_back( satellite_pos );
+            if (orbit.size() > 500)
+                orbit.erase(orbit.begin());
+        }
+    }
+
     void draw() {
         orbitControl();
 
@@ -99,29 +107,21 @@ class VeraApp : public App {
         satellite_pos = vec3( getWorldMatrix() * vec4(0.0f, 0.0f, 1.2f, 0.0f) );
         pop();
 
-        if (frameCount%15 == 0) {
-            orbit.push_back( satellite_pos );
-            if (orbit.size() > 500)
-                orbit.erase(orbit.begin());
-        }
-    
         strokeWeight(1.0);
         stroke(0.75f, 0.0f, 0.0f);
         line(orbit);
 
         fill(1.0f);
-        if (getXR() == NONE_XR_MODE)
-            text("Hello World", width * 0.5f, height - 50.0f);
-        else if (getXR() == VR_MODE)
-            text("Hello VR World", width * 0.5f, height - 50.0f);
-        else if (getXR() == AR_MODE)
-            text("Hello AR World", width * 0.5f, height - 50.0f);
+        text("Hello World", width * 0.5f, height * 0.95f);
     }
 };
 
 VeraApp app;
 
 int main(int argc, char **argv) {
-    app.run();
+    WindowProperties prop;
+    // prop.style = LENTICULAR;
+    // setQuiltProperties(2);
+    app.run(prop);
     return 1;
 }
