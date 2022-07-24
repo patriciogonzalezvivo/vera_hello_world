@@ -120,8 +120,8 @@ VeraApp app;
 
 int main(int argc, char **argv) {
     WindowProperties prop;
-    // prop.style = LENTICULAR;
-    // setQuiltProperties(2);
+    prop.style = LENTICULAR;
+    setQuiltProperties(2);
     app.run(prop);
     return 1;
 }

@@ -532,13 +532,13 @@ function getNativeTypeSize(type) {
     default: {
       if (type[type.length - 1] === '*') {
         return POINTER_SIZE;
-      } else if (type[0] === 'i') {
+      }
+      if (type[0] === 'i') {
         const bits = Number(type.substr(1));
         assert(bits % 8 === 0, 'getNativeTypeSize invalid bits ' + bits + ', type ' + type);
         return bits / 8;
-      } else {
-        return 0;
       }
+      return 0;
     }
   }
 }
@@ -563,24 +563,47 @@ function ignoredModuleProp(prop) {
   }
 }
 
-function unexportedMessage(sym, isFSSybol) {
-  var msg = "'" + sym + "' was not exported. add it to EXPORTED_RUNTIME_METHODS (see the FAQ)";
-  if (isFSSybol) {
-    msg += '. Alternatively, forcing filesystem support (-sFORCE_FILESYSTEM) can export this for you';
+// forcing the filesystem exports a few things by default
+function isExportedByForceFilesystem(name) {
+  return name === 'FS_createPath' ||
+         name === 'FS_createDataFile' ||
+         name === 'FS_createPreloadedFile' ||
+         name === 'FS_unlink' ||
+         name === 'addRunDependency' ||
+         // The old FS has some functionality that WasmFS lacks.
+         name === 'FS_createLazyFile' ||
+         name === 'FS_createDevice' ||
+         name === 'removeRunDependency';
+}
+
+function missingLibrarySymbol(sym) {
+  if (typeof globalThis !== 'undefined' && !Object.getOwnPropertyDescriptor(globalThis, sym)) {
+    Object.defineProperty(globalThis, sym, {
+      configurable: true,
+      get: function() {
+        // Can't `abort()` here because it would break code that does runtime
+        // checks.  e.g. `if (typeof SDL === 'undefined')`.
+        var msg = '`' + sym + '` is a library symbol and not included by default; add it to your library.js __deps or to DEFAULT_LIBRARY_FUNCS_TO_INCLUDE on the command line';
+        if (isExportedByForceFilesystem(sym)) {
+          msg += '. Alternatively, forcing filesystem support (-sFORCE_FILESYSTEM) can export this for you';
+        }
+        warnOnce(msg);
+        return undefined;
+      }
+    });
   }
-  return msg;
 }
 
-function missingLibraryFunc(sym) {
-  return () => abort('Call to `' + sym + '` which is a library function and not included by default; add it to your library.js __deps or to DEFAULT_LIBRARY_FUNCS_TO_INCLUDE on the command line');
-}
-
-function unexportedRuntimeSymbol(sym, isFSSybol) {
+function unexportedRuntimeSymbol(sym) {
   if (!Object.getOwnPropertyDescriptor(Module, sym)) {
     Object.defineProperty(Module, sym, {
       configurable: true,
       get: function() {
-        abort(unexportedMessage(sym, isFSSybol));
+        var msg = "'" + sym + "' was not exported. add it to EXPORTED_RUNTIME_METHODS (see the FAQ)";
+        if (isExportedByForceFilesystem(sym)) {
+          msg += '. Alternatively, forcing filesystem support (-sFORCE_FILESYSTEM) can export this for you';
+        }
+        abort(msg);
       }
     });
   }
@@ -663,32 +686,31 @@ function UTF8ArrayToString(heapOrArray, idx, maxBytesToRead) {
 
   if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
     return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
-  } else {
-    var str = '';
-    // If building with TextDecoder, we have already computed the string length above, so test loop end condition against that
-    while (idx < endPtr) {
-      // For UTF8 byte structure, see:
-      // http://en.wikipedia.org/wiki/UTF-8#Description
-      // https://www.ietf.org/rfc/rfc2279.txt
-      // https://tools.ietf.org/html/rfc3629
-      var u0 = heapOrArray[idx++];
-      if (!(u0 & 0x80)) { str += String.fromCharCode(u0); continue; }
-      var u1 = heapOrArray[idx++] & 63;
-      if ((u0 & 0xE0) == 0xC0) { str += String.fromCharCode(((u0 & 31) << 6) | u1); continue; }
-      var u2 = heapOrArray[idx++] & 63;
-      if ((u0 & 0xF0) == 0xE0) {
-        u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
-      } else {
-        if ((u0 & 0xF8) != 0xF0) warnOnce('Invalid UTF-8 leading byte 0x' + u0.toString(16) + ' encountered when deserializing a UTF-8 string in wasm memory to a JS string!');
-        u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
-      }
+  }
+  var str = '';
+  // If building with TextDecoder, we have already computed the string length above, so test loop end condition against that
+  while (idx < endPtr) {
+    // For UTF8 byte structure, see:
+    // http://en.wikipedia.org/wiki/UTF-8#Description
+    // https://www.ietf.org/rfc/rfc2279.txt
+    // https://tools.ietf.org/html/rfc3629
+    var u0 = heapOrArray[idx++];
+    if (!(u0 & 0x80)) { str += String.fromCharCode(u0); continue; }
+    var u1 = heapOrArray[idx++] & 63;
+    if ((u0 & 0xE0) == 0xC0) { str += String.fromCharCode(((u0 & 31) << 6) | u1); continue; }
+    var u2 = heapOrArray[idx++] & 63;
+    if ((u0 & 0xF0) == 0xE0) {
+      u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
+    } else {
+      if ((u0 & 0xF8) != 0xF0) warnOnce('Invalid UTF-8 leading byte 0x' + u0.toString(16) + ' encountered when deserializing a UTF-8 string in wasm memory to a JS string!');
+      u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
+    }
 
-      if (u0 < 0x10000) {
-        str += String.fromCharCode(u0);
-      } else {
-        var ch = u0 - 0x10000;
-        str += String.fromCharCode(0xD800 | (ch >> 10), 0xDC00 | (ch & 0x3FF));
-      }
+    if (u0 < 0x10000) {
+      str += String.fromCharCode(u0);
+    } else {
+      var ch = u0 - 0x10000;
+      str += String.fromCharCode(0xD800 | (ch >> 10), 0xDC00 | (ch & 0x3FF));
     }
   }
   return str;
@@ -783,12 +805,16 @@ function lengthBytesUTF8(str) {
   for (var i = 0; i < str.length; ++i) {
     // Gotcha: charCodeAt returns a 16-bit word that is a UTF-16 encoded code unit, not a Unicode code point of the character! So decode UTF16->UTF32->UTF8.
     // See http://unicode.org/faq/utf_bom.html#utf16-3
-    var u = str.charCodeAt(i); // possibly a lead surrogate
-    if (u >= 0xD800 && u <= 0xDFFF) u = 0x10000 + ((u & 0x3FF) << 10) | (str.charCodeAt(++i) & 0x3FF);
-    if (u <= 0x7F) ++len;
-    else if (u <= 0x7FF) len += 2;
-    else if (u <= 0xFFFF) len += 3;
-    else len += 4;
+    var c = str.charCodeAt(i); // possibly a lead surrogate
+    if (c <= 0x7F) {
+      len++;
+    } else if (c <= 0x7FF) {
+      len += 2;
+    } else if (c >= 0xD800 && c <= 0xDFFF) {
+      len += 4; ++i;
+    } else {
+      len += 3;
+    }
   }
   return len;
 }
@@ -1158,9 +1184,8 @@ function getBinary(file) {
     }
     if (readBinary) {
       return readBinary(file);
-    } else {
-      throw "both async and sync fetching of the wasm failed";
     }
+    throw "both async and sync fetching of the wasm failed";
   }
   catch (err) {
     abort(err);
@@ -1456,6 +1481,7 @@ var ASM_CONSTS = {
       if (!warnOnce.shown) warnOnce.shown = {};
       if (!warnOnce.shown[text]) {
         warnOnce.shown[text] = 1;
+        if (ENVIRONMENT_IS_NODE) text = 'warning: ' + text;
         err(text);
       }
     }
@@ -1651,20 +1677,20 @@ var ASM_CONSTS = {
       if (typeof crypto == 'object' && typeof crypto['getRandomValues'] == 'function') {
         // for modern web browsers
         var randomBuffer = new Uint8Array(1);
-        return function() { crypto.getRandomValues(randomBuffer); return randomBuffer[0]; };
+        return () => { crypto.getRandomValues(randomBuffer); return randomBuffer[0]; };
       } else
       if (ENVIRONMENT_IS_NODE) {
         // for nodejs with or without crypto support included
         try {
           var crypto_module = require('crypto');
           // nodejs has crypto support
-          return function() { return crypto_module['randomBytes'](1)[0]; };
+          return () => crypto_module['randomBytes'](1)[0];
         } catch (e) {
           // nodejs doesn't have crypto support
         }
       }
       // we couldn't find a proper implementation, as Math.random() is not suitable for /dev/random, see emscripten-core/emscripten/pull/7096
-      return function() { abort("no cryptographic support found for randomDevice. consider polyfilling it if you want to use something insecure like Math.random(), e.g. put this in a --pre-js: var crypto = { getRandomValues: function(array) { for (var i = 0; i < array.length; i++) array[i] = (Math.random()*256)|0 } };"); };
+      return () => abort("no cryptographic support found for randomDevice. consider polyfilling it if you want to use something insecure like Math.random(), e.g. put this in a --pre-js: var crypto = { getRandomValues: function(array) { for (var i = 0; i < array.length; i++) array[i] = (Math.random()*256)|0 } };");
     }
   
   var PATH_FS = {resolve:function() {
@@ -2198,11 +2224,11 @@ var ASM_CONSTS = {
   /** @param {boolean=} noRunDep */
   function asyncLoad(url, onload, onerror, noRunDep) {
       var dep = !noRunDep ? getUniqueRunDependency('al ' + url) : '';
-      readAsync(url, function(arrayBuffer) {
+      readAsync(url, (arrayBuffer) => {
         assert(arrayBuffer, 'Loading data file "' + url + '" failed (no arrayBuffer).');
         onload(new Uint8Array(arrayBuffer));
         if (dep) removeRunDependency(dep);
-      }, function(event) {
+      }, (event) => {
         if (onerror) {
           onerror();
         } else {
@@ -3358,11 +3384,10 @@ var ASM_CONSTS = {
         return mode;
       },findObject:(path, dontResolveLastLink) => {
         var ret = FS.analyzePath(path, dontResolveLastLink);
-        if (ret.exists) {
-          return ret.object;
-        } else {
+        if (!ret.exists) {
           return null;
         }
+        return ret.object;
       },analyzePath:(path, dontResolveLastLink) => {
         // operate from within the context of the symlink's target
         try {
@@ -3554,9 +3579,8 @@ var ASM_CONSTS = {
             if (!(xhr.status >= 200 && xhr.status < 300 || xhr.status === 304)) throw new Error("Couldn't load " + url + ". Status: " + xhr.status);
             if (xhr.response !== undefined) {
               return new Uint8Array(/** @type{Array<number>} */(xhr.response || []));
-            } else {
-              return intArrayFromString(xhr.responseText || '', true);
             }
+            return intArrayFromString(xhr.responseText || '', true);
           };
           var lazyArray = this;
           lazyArray.setDataGetter((chunkNum) => {
@@ -3824,11 +3848,11 @@ var ASM_CONSTS = {
         (tempI64 = [stat.size>>>0,(tempDouble=stat.size,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(40))>>2)] = tempI64[0],HEAP32[(((buf)+(44))>>2)] = tempI64[1]);
         HEAP32[(((buf)+(48))>>2)] = 4096;
         HEAP32[(((buf)+(52))>>2)] = stat.blocks;
-        HEAP32[(((buf)+(56))>>2)] = (stat.atime.getTime() / 1000)|0;
+        (tempI64 = [Math.floor(stat.atime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.atime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(56))>>2)] = tempI64[0],HEAP32[(((buf)+(60))>>2)] = tempI64[1]);
         HEAP32[(((buf)+(64))>>2)] = 0;
-        HEAP32[(((buf)+(72))>>2)] = (stat.mtime.getTime() / 1000)|0;
+        (tempI64 = [Math.floor(stat.mtime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.mtime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(72))>>2)] = tempI64[0],HEAP32[(((buf)+(76))>>2)] = tempI64[1]);
         HEAP32[(((buf)+(80))>>2)] = 0;
-        HEAP32[(((buf)+(88))>>2)] = (stat.ctime.getTime() / 1000)|0;
+        (tempI64 = [Math.floor(stat.ctime.getTime() / 1000)>>>0,(tempDouble=Math.floor(stat.ctime.getTime() / 1000),(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(88))>>2)] = tempI64[0],HEAP32[(((buf)+(92))>>2)] = tempI64[1]);
         HEAP32[(((buf)+(96))>>2)] = 0;
         (tempI64 = [stat.ino>>>0,(tempDouble=stat.ino,(+(Math.abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math.min((+(Math.floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math.ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[(((buf)+(104))>>2)] = tempI64[0],HEAP32[(((buf)+(108))>>2)] = tempI64[1]);
         return 0;
@@ -4085,8 +4109,11 @@ var ASM_CONSTS = {
       return nowIsMonotonic;
     }
 
+  function readI53FromI64(ptr) {
+      return HEAPU32[ptr>>2] + HEAP32[ptr+4>>2] * 4294967296;
+    }
   function __localtime_js(time, tmPtr) {
-      var date = new Date(HEAP32[((time)>>2)]*1000);
+      var date = new Date(readI53FromI64(time)*1000);
       HEAP32[((tmPtr)>>2)] = date.getSeconds();
       HEAP32[(((tmPtr)+(4))>>2)] = date.getMinutes();
       HEAP32[(((tmPtr)+(8))>>2)] = date.getHours();
@@ -5259,10 +5286,6 @@ var ASM_CONSTS = {
       return GLctx.getAttribLocation(GL.programs[program], UTF8ToString(name));
     }
 
-  function readI53FromI64(ptr) {
-      return HEAPU32[ptr>>2] + HEAP32[ptr+4>>2] * 4294967296;
-    }
-  
   function readI53FromU64(ptr) {
       return HEAPU32[ptr>>2] + HEAPU32[ptr+4>>2] * 4294967296;
     }
@@ -5662,6 +5685,8 @@ var ASM_CONSTS = {
 
   function _glRenderbufferStorage(x0, x1, x2, x3) { GLctx['renderbufferStorage'](x0, x1, x2, x3) }
 
+  function _glScissor(x0, x1, x2, x3) { GLctx['scissor'](x0, x1, x2, x3) }
+
   function _glShaderSource(shader, count, string, length) {
       var source = GL.getSource(shader, count, string, length);
   
@@ -5922,14 +5947,15 @@ var ASM_CONSTS = {
           // Emulate setImmediate. (note: not a complete polyfill, we don't emulate clearImmediate() to keep code size to minimum, since not needed)
           var setImmediates = [];
           var emscriptenMainLoopMessageId = 'setimmediate';
-          var Browser_setImmediate_messageHandler = function(/** @type {Event} */ event) {
+          /** @param {Event} event */
+          var Browser_setImmediate_messageHandler = (event) => {
             // When called in current thread or Worker, the main loop ID is structured slightly different to accommodate for --proxy-to-worker runtime listening to Worker events,
             // so check for both cases.
             if (event.data === emscriptenMainLoopMessageId || event.data.target === emscriptenMainLoopMessageId) {
               event.stopPropagation();
               setImmediates.shift()();
             }
-          }
+          };
           addEventListener("message", Browser_setImmediate_messageHandler, true);
           setImmediate = /** @type{function(function(): ?, ...?): number} */(function Browser_emulated_setImmediate(func) {
             setImmediates.push(func);
@@ -6053,15 +6079,9 @@ var ASM_CONSTS = {
       }
     }
   
-  /** @param {boolean=} synchronous */
-  function callUserCallback(func, synchronous) {
+  function callUserCallback(func) {
       if (ABORT) {
         err('user callback triggered after runtime exited or application aborted.  Ignoring.');
-        return;
-      }
-      // For synchronous calls, let any exceptions propagate, and don't let the runtime exit.
-      if (synchronous) {
-        func();
         return;
       }
       try {
@@ -6217,7 +6237,7 @@ var ASM_CONSTS = {
             var url = Browser.URLObject.createObjectURL(b); // XXX we never revoke this!
             assert(typeof url == 'string', 'createObjectURL must return a url as a string');
             var audio = new Audio();
-            audio.addEventListener('canplaythrough', function() { finish(audio) }, false); // use addEventListener due to chromium bug 124926
+            audio.addEventListener('canplaythrough', () => finish(audio), false); // use addEventListener due to chromium bug 124926
             audio.onerror = function audio_onerror(event) {
               if (done) return;
               err('warning: browser could not fully decode audio ' + name + ', trying slower base64 approach');
@@ -6276,12 +6296,12 @@ var ASM_CONSTS = {
                                       canvas['mozRequestPointerLock'] ||
                                       canvas['webkitRequestPointerLock'] ||
                                       canvas['msRequestPointerLock'] ||
-                                      function(){};
+                                      (() => {});
           canvas.exitPointerLock = document['exitPointerLock'] ||
                                    document['mozExitPointerLock'] ||
                                    document['webkitExitPointerLock'] ||
                                    document['msExitPointerLock'] ||
-                                   function(){}; // no-op if function does not exist
+                                   (() => {}); // no-op if function does not exist
           canvas.exitPointerLock = canvas.exitPointerLock.bind(document);
   
           document.addEventListener('pointerlockchange', pointerLockChange, false);
@@ -6290,7 +6310,7 @@ var ASM_CONSTS = {
           document.addEventListener('mspointerlockchange', pointerLockChange, false);
   
           if (Module['elementPointerLock']) {
-            canvas.addEventListener("click", function(ev) {
+            canvas.addEventListener("click", (ev) => {
               if (!Browser.pointerLock && Module['canvas'].requestPointerLock) {
                 Module['canvas'].requestPointerLock();
                 ev.preventDefault();
@@ -6408,8 +6428,8 @@ var ASM_CONSTS = {
         canvasContainer.requestFullscreen = canvasContainer['requestFullscreen'] ||
                                             canvasContainer['mozRequestFullScreen'] ||
                                             canvasContainer['msRequestFullscreen'] ||
-                                           (canvasContainer['webkitRequestFullscreen'] ? function() { canvasContainer['webkitRequestFullscreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null) ||
-                                           (canvasContainer['webkitRequestFullScreen'] ? function() { canvasContainer['webkitRequestFullScreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null);
+                                           (canvasContainer['webkitRequestFullscreen'] ? () => canvasContainer['webkitRequestFullscreen'](Element['ALLOW_KEYBOARD_INPUT']) : null) ||
+                                           (canvasContainer['webkitRequestFullScreen'] ? () => canvasContainer['webkitRequestFullScreen'](Element['ALLOW_KEYBOARD_INPUT']) : null);
   
         canvasContainer.requestFullscreen();
       },requestFullScreen:function() {
@@ -7725,12 +7745,10 @@ var ASM_CONSTS = {
             // this date is after the start of the first week of this year
             if (compareByDay(firstWeekStartNextYear, thisDate) <= 0) {
               return thisDate.getFullYear()+1;
-            } else {
-              return thisDate.getFullYear();
             }
-          } else {
-            return thisDate.getFullYear()-1;
+            return thisDate.getFullYear();
           }
+          return thisDate.getFullYear()-1;
       }
   
       var EXPANSION_RULES_2 = {
@@ -7797,9 +7815,8 @@ var ASM_CONSTS = {
         '%p': function(date) {
           if (date.tm_hour >= 0 && date.tm_hour < 12) {
             return 'AM';
-          } else {
-            return 'PM';
           }
+          return 'PM';
         },
         '%S': function(date) {
           return leadingNulls(date.tm_sec, 2);
@@ -8397,6 +8414,8 @@ var ASM_CONSTS = {
       return ret;
     }
 
+
+
   function AsciiToString(ptr) {
       var str = '';
       while (1) {
@@ -8588,7 +8607,7 @@ var ASM_CONSTS = {
   function ccall(ident, returnType, argTypes, args, opts) {
       // For fast lookup of conversion functions
       var toC = {
-        'string': function(str) {
+        'string': (str) => {
           var ret = 0;
           if (str !== null && str !== undefined && str !== 0) { // null string
             // at most 4 bytes per UTF-8 code point, +1 for the trailing '\0'
@@ -8598,7 +8617,7 @@ var ASM_CONSTS = {
           }
           return ret;
         },
-        'array': function(arr) {
+        'array': (arr) => {
           var ret = stackAlloc(arr.length);
           writeArrayToMemory(arr, ret);
           return ret;
@@ -9077,17 +9096,18 @@ var miniTempWebGLFloatBuffersStorage = new Float32Array(288);
   miniTempWebGLFloatBuffers[i] = miniTempWebGLFloatBuffersStorage.subarray(0, i+1);
   }
   ;
-Module["requestFullscreen"] = function Module_requestFullscreen(lockPointer, resizeCanvas) { Browser.requestFullscreen(lockPointer, resizeCanvas) };
-  Module["requestFullScreen"] = function Module_requestFullScreen() { Browser.requestFullScreen() };
-  Module["requestAnimationFrame"] = function Module_requestAnimationFrame(func) { Browser.requestAnimationFrame(func) };
-  Module["setCanvasSize"] = function Module_setCanvasSize(width, height, noUpdates) { Browser.setCanvasSize(width, height, noUpdates) };
-  Module["pauseMainLoop"] = function Module_pauseMainLoop() { Browser.mainLoop.pause() };
-  Module["resumeMainLoop"] = function Module_resumeMainLoop() { Browser.mainLoop.resume() };
-  Module["getUserMedia"] = function Module_getUserMedia() { Browser.getUserMedia() };
-  Module["createContext"] = function Module_createContext(canvas, useWebGL, setInModule, webGLContextAttributes) { return Browser.createContext(canvas, useWebGL, setInModule, webGLContextAttributes) };
-  var preloadedImages = {};
-  var preloadedAudios = {};
-  ;
+
+      // exports
+      Module["requestFullscreen"] = function Module_requestFullscreen(lockPointer, resizeCanvas) { Browser.requestFullscreen(lockPointer, resizeCanvas) };
+      Module["requestFullScreen"] = function Module_requestFullScreen() { Browser.requestFullScreen() };
+      Module["requestAnimationFrame"] = function Module_requestAnimationFrame(func) { Browser.requestAnimationFrame(func) };
+      Module["setCanvasSize"] = function Module_setCanvasSize(width, height, noUpdates) { Browser.setCanvasSize(width, height, noUpdates) };
+      Module["pauseMainLoop"] = function Module_pauseMainLoop() { Browser.mainLoop.pause() };
+      Module["resumeMainLoop"] = function Module_resumeMainLoop() { Browser.mainLoop.resume() };
+      Module["getUserMedia"] = function Module_getUserMedia() { Browser.getUserMedia() };
+      Module["createContext"] = function Module_createContext(canvas, useWebGL, setInModule, webGLContextAttributes) { return Browser.createContext(canvas, useWebGL, setInModule, webGLContextAttributes) };
+      var preloadedImages = {};
+      var preloadedAudios = {};;
 var ASSERTIONS = true;
 
 // Copied from https://github.com/strophe/strophejs/blob/e06d027/src/polyfills.js#L149
@@ -9253,6 +9273,7 @@ var asmLibraryArg = {
   "glLinkProgram": _glLinkProgram,
   "glPixelStorei": _glPixelStorei,
   "glRenderbufferStorage": _glRenderbufferStorage,
+  "glScissor": _glScissor,
   "glShaderSource": _glShaderSource,
   "glTexImage2D": _glTexImage2D,
   "glTexParameteri": _glTexParameteri,
@@ -9378,13 +9399,13 @@ var dynCall_idi = Module["dynCall_idi"] = createExportWrapper("dynCall_idi");
 var dynCall_viiiii = Module["dynCall_viiiii"] = createExportWrapper("dynCall_viiiii");
 
 /** @type {function(...*):?} */
+var dynCall_viiii = Module["dynCall_viiii"] = createExportWrapper("dynCall_viiii");
+
+/** @type {function(...*):?} */
 var dynCall_iii = Module["dynCall_iii"] = createExportWrapper("dynCall_iii");
 
 /** @type {function(...*):?} */
 var dynCall_v = Module["dynCall_v"] = createExportWrapper("dynCall_v");
-
-/** @type {function(...*):?} */
-var dynCall_viiii = Module["dynCall_viiii"] = createExportWrapper("dynCall_viiii");
 
 /** @type {function(...*):?} */
 var dynCall_iiii = Module["dynCall_iiii"] = createExportWrapper("dynCall_iiii");
@@ -9485,333 +9506,337 @@ var _asyncify_stop_rewind = Module["_asyncify_stop_rewind"] = createExportWrappe
 
 // === Auto-generated postamble setup entry stuff ===
 
-unexportedRuntimeSymbol('run', false);
-unexportedRuntimeSymbol('UTF8ArrayToString', false);
-unexportedRuntimeSymbol('UTF8ToString', false);
-unexportedRuntimeSymbol('stringToUTF8Array', false);
-unexportedRuntimeSymbol('stringToUTF8', false);
-unexportedRuntimeSymbol('lengthBytesUTF8', false);
-unexportedRuntimeSymbol('addOnPreRun', false);
-unexportedRuntimeSymbol('addOnInit', false);
-unexportedRuntimeSymbol('addOnPreMain', false);
-unexportedRuntimeSymbol('addOnExit', false);
-unexportedRuntimeSymbol('addOnPostRun', false);
 Module["addRunDependency"] = addRunDependency;
 Module["removeRunDependency"] = removeRunDependency;
-unexportedRuntimeSymbol('FS_createFolder', false);
 Module["FS_createPath"] = FS.createPath;
 Module["FS_createDataFile"] = FS.createDataFile;
 Module["FS_createPreloadedFile"] = FS.createPreloadedFile;
 Module["FS_createLazyFile"] = FS.createLazyFile;
-unexportedRuntimeSymbol('FS_createLink', false);
 Module["FS_createDevice"] = FS.createDevice;
 Module["FS_unlink"] = FS.unlink;
-unexportedRuntimeSymbol('getLEB', false);
-unexportedRuntimeSymbol('getFunctionTables', false);
-unexportedRuntimeSymbol('alignFunctionTables', false);
-unexportedRuntimeSymbol('registerFunctions', false);
-unexportedRuntimeSymbol('prettyPrint', false);
-unexportedRuntimeSymbol('getCompilerSetting', false);
-unexportedRuntimeSymbol('print', false);
-unexportedRuntimeSymbol('printErr', false);
-unexportedRuntimeSymbol('getTempRet0', false);
-unexportedRuntimeSymbol('setTempRet0', false);
-unexportedRuntimeSymbol('callMain', false);
-unexportedRuntimeSymbol('abort', false);
-unexportedRuntimeSymbol('keepRuntimeAlive', false);
-unexportedRuntimeSymbol('wasmMemory', false);
-unexportedRuntimeSymbol('stackSave', false);
-unexportedRuntimeSymbol('stackRestore', false);
-unexportedRuntimeSymbol('stackAlloc', false);
-unexportedRuntimeSymbol('writeStackCookie', false);
-unexportedRuntimeSymbol('checkStackCookie', false);
-unexportedRuntimeSymbol('ptrToString', false);
-unexportedRuntimeSymbol('zeroMemory', false);
-unexportedRuntimeSymbol('stringToNewUTF8', false);
-unexportedRuntimeSymbol('exitJS', false);
-unexportedRuntimeSymbol('getHeapMax', false);
-unexportedRuntimeSymbol('emscripten_realloc_buffer', false);
-unexportedRuntimeSymbol('ENV', false);
-unexportedRuntimeSymbol('ERRNO_CODES', false);
-unexportedRuntimeSymbol('ERRNO_MESSAGES', false);
-unexportedRuntimeSymbol('setErrNo', false);
-unexportedRuntimeSymbol('inetPton4', false);
-unexportedRuntimeSymbol('inetNtop4', false);
-unexportedRuntimeSymbol('inetPton6', false);
-unexportedRuntimeSymbol('inetNtop6', false);
-unexportedRuntimeSymbol('readSockaddr', false);
-unexportedRuntimeSymbol('writeSockaddr', false);
-unexportedRuntimeSymbol('DNS', false);
-unexportedRuntimeSymbol('getHostByName', false);
-unexportedRuntimeSymbol('Protocols', false);
-unexportedRuntimeSymbol('Sockets', false);
-unexportedRuntimeSymbol('getRandomDevice', false);
-unexportedRuntimeSymbol('warnOnce', false);
-unexportedRuntimeSymbol('traverseStack', false);
-unexportedRuntimeSymbol('UNWIND_CACHE', false);
-unexportedRuntimeSymbol('convertPCtoSourceLocation', false);
-unexportedRuntimeSymbol('readAsmConstArgsArray', false);
-unexportedRuntimeSymbol('readAsmConstArgs', false);
-unexportedRuntimeSymbol('mainThreadEM_ASM', false);
-unexportedRuntimeSymbol('jstoi_q', false);
-unexportedRuntimeSymbol('jstoi_s', false);
-unexportedRuntimeSymbol('getExecutableName', false);
-unexportedRuntimeSymbol('listenOnce', false);
-unexportedRuntimeSymbol('autoResumeAudioContext', false);
-unexportedRuntimeSymbol('dynCallLegacy', false);
-unexportedRuntimeSymbol('getDynCaller', false);
-unexportedRuntimeSymbol('dynCall', false);
-unexportedRuntimeSymbol('handleException', false);
-unexportedRuntimeSymbol('runtimeKeepalivePush', false);
-unexportedRuntimeSymbol('runtimeKeepalivePop', false);
-unexportedRuntimeSymbol('callUserCallback', false);
-unexportedRuntimeSymbol('maybeExit', false);
-unexportedRuntimeSymbol('safeSetTimeout', false);
-unexportedRuntimeSymbol('asmjsMangle', false);
-unexportedRuntimeSymbol('asyncLoad', false);
-unexportedRuntimeSymbol('alignMemory', false);
-unexportedRuntimeSymbol('mmapAlloc', false);
-unexportedRuntimeSymbol('writeI53ToI64', false);
-unexportedRuntimeSymbol('writeI53ToI64Clamped', false);
-unexportedRuntimeSymbol('writeI53ToI64Signaling', false);
-unexportedRuntimeSymbol('writeI53ToU64Clamped', false);
-unexportedRuntimeSymbol('writeI53ToU64Signaling', false);
-unexportedRuntimeSymbol('readI53FromI64', false);
-unexportedRuntimeSymbol('readI53FromU64', false);
-unexportedRuntimeSymbol('convertI32PairToI53', false);
-unexportedRuntimeSymbol('convertI32PairToI53Checked', false);
-unexportedRuntimeSymbol('convertU32PairToI53', false);
-unexportedRuntimeSymbol('getCFunc', false);
-unexportedRuntimeSymbol('ccall', false);
-unexportedRuntimeSymbol('cwrap', false);
-unexportedRuntimeSymbol('uleb128Encode', false);
-unexportedRuntimeSymbol('sigToWasmTypes', false);
-unexportedRuntimeSymbol('convertJsFunctionToWasm', false);
-unexportedRuntimeSymbol('freeTableIndexes', false);
-unexportedRuntimeSymbol('functionsInTableMap', false);
-unexportedRuntimeSymbol('getEmptyTableSlot', false);
-unexportedRuntimeSymbol('updateTableMap', false);
-unexportedRuntimeSymbol('addFunction', false);
-unexportedRuntimeSymbol('removeFunction', false);
-unexportedRuntimeSymbol('reallyNegative', false);
-unexportedRuntimeSymbol('unSign', false);
-unexportedRuntimeSymbol('strLen', false);
-unexportedRuntimeSymbol('reSign', false);
-unexportedRuntimeSymbol('formatString', false);
-unexportedRuntimeSymbol('setValue', false);
-unexportedRuntimeSymbol('getValue', false);
-unexportedRuntimeSymbol('PATH', false);
-unexportedRuntimeSymbol('PATH_FS', false);
-unexportedRuntimeSymbol('intArrayFromString', false);
-unexportedRuntimeSymbol('intArrayToString', false);
-unexportedRuntimeSymbol('AsciiToString', false);
-unexportedRuntimeSymbol('stringToAscii', false);
-unexportedRuntimeSymbol('UTF16Decoder', false);
-unexportedRuntimeSymbol('UTF16ToString', false);
-unexportedRuntimeSymbol('stringToUTF16', false);
-unexportedRuntimeSymbol('lengthBytesUTF16', false);
-unexportedRuntimeSymbol('UTF32ToString', false);
-unexportedRuntimeSymbol('stringToUTF32', false);
-unexportedRuntimeSymbol('lengthBytesUTF32', false);
-unexportedRuntimeSymbol('allocateUTF8', false);
-unexportedRuntimeSymbol('allocateUTF8OnStack', false);
-unexportedRuntimeSymbol('writeStringToMemory', false);
-unexportedRuntimeSymbol('writeArrayToMemory', false);
-unexportedRuntimeSymbol('writeAsciiToMemory', false);
-unexportedRuntimeSymbol('SYSCALLS', false);
-unexportedRuntimeSymbol('getSocketFromFD', false);
-unexportedRuntimeSymbol('getSocketAddress', false);
-unexportedRuntimeSymbol('JSEvents', false);
-unexportedRuntimeSymbol('registerKeyEventCallback', false);
-unexportedRuntimeSymbol('specialHTMLTargets', false);
-unexportedRuntimeSymbol('maybeCStringToJsString', false);
-unexportedRuntimeSymbol('findEventTarget', false);
-unexportedRuntimeSymbol('findCanvasEventTarget', false);
-unexportedRuntimeSymbol('getBoundingClientRect', false);
-unexportedRuntimeSymbol('fillMouseEventData', false);
-unexportedRuntimeSymbol('registerMouseEventCallback', false);
-unexportedRuntimeSymbol('registerWheelEventCallback', false);
-unexportedRuntimeSymbol('registerUiEventCallback', false);
-unexportedRuntimeSymbol('registerFocusEventCallback', false);
-unexportedRuntimeSymbol('fillDeviceOrientationEventData', false);
-unexportedRuntimeSymbol('registerDeviceOrientationEventCallback', false);
-unexportedRuntimeSymbol('fillDeviceMotionEventData', false);
-unexportedRuntimeSymbol('registerDeviceMotionEventCallback', false);
-unexportedRuntimeSymbol('screenOrientation', false);
-unexportedRuntimeSymbol('fillOrientationChangeEventData', false);
-unexportedRuntimeSymbol('registerOrientationChangeEventCallback', false);
-unexportedRuntimeSymbol('fillFullscreenChangeEventData', false);
-unexportedRuntimeSymbol('registerFullscreenChangeEventCallback', false);
-unexportedRuntimeSymbol('JSEvents_requestFullscreen', false);
-unexportedRuntimeSymbol('JSEvents_resizeCanvasForFullscreen', false);
-unexportedRuntimeSymbol('registerRestoreOldStyle', false);
-unexportedRuntimeSymbol('hideEverythingExceptGivenElement', false);
-unexportedRuntimeSymbol('restoreHiddenElements', false);
-unexportedRuntimeSymbol('setLetterbox', false);
-unexportedRuntimeSymbol('currentFullscreenStrategy', false);
-unexportedRuntimeSymbol('restoreOldWindowedStyle', false);
-unexportedRuntimeSymbol('softFullscreenResizeWebGLRenderTarget', false);
-unexportedRuntimeSymbol('doRequestFullscreen', false);
-unexportedRuntimeSymbol('fillPointerlockChangeEventData', false);
-unexportedRuntimeSymbol('registerPointerlockChangeEventCallback', false);
-unexportedRuntimeSymbol('registerPointerlockErrorEventCallback', false);
-unexportedRuntimeSymbol('requestPointerLock', false);
-unexportedRuntimeSymbol('fillVisibilityChangeEventData', false);
-unexportedRuntimeSymbol('registerVisibilityChangeEventCallback', false);
-unexportedRuntimeSymbol('registerTouchEventCallback', false);
-unexportedRuntimeSymbol('fillGamepadEventData', false);
-unexportedRuntimeSymbol('registerGamepadEventCallback', false);
-unexportedRuntimeSymbol('registerBeforeUnloadEventCallback', false);
-unexportedRuntimeSymbol('fillBatteryEventData', false);
-unexportedRuntimeSymbol('battery', false);
-unexportedRuntimeSymbol('registerBatteryEventCallback', false);
-unexportedRuntimeSymbol('setCanvasElementSize', false);
-unexportedRuntimeSymbol('getCanvasElementSize', false);
-unexportedRuntimeSymbol('demangle', false);
-unexportedRuntimeSymbol('demangleAll', false);
-unexportedRuntimeSymbol('jsStackTrace', false);
-unexportedRuntimeSymbol('stackTrace', false);
-unexportedRuntimeSymbol('ExitStatus', false);
-unexportedRuntimeSymbol('getEnvStrings', false);
-unexportedRuntimeSymbol('checkWasiClock', false);
-unexportedRuntimeSymbol('doReadv', false);
-unexportedRuntimeSymbol('doWritev', false);
-unexportedRuntimeSymbol('dlopenMissingError', false);
-unexportedRuntimeSymbol('setImmediateWrapped', false);
-unexportedRuntimeSymbol('clearImmediateWrapped', false);
-unexportedRuntimeSymbol('polyfillSetImmediate', false);
-unexportedRuntimeSymbol('uncaughtExceptionCount', false);
-unexportedRuntimeSymbol('exceptionLast', false);
-unexportedRuntimeSymbol('exceptionCaught', false);
-unexportedRuntimeSymbol('ExceptionInfo', false);
-unexportedRuntimeSymbol('exception_addRef', false);
-unexportedRuntimeSymbol('exception_decRef', false);
-unexportedRuntimeSymbol('Browser', false);
-unexportedRuntimeSymbol('setMainLoop', false);
-unexportedRuntimeSymbol('wget', false);
-unexportedRuntimeSymbol('FS', false);
-unexportedRuntimeSymbol('MEMFS', false);
-unexportedRuntimeSymbol('TTY', false);
-unexportedRuntimeSymbol('PIPEFS', false);
-unexportedRuntimeSymbol('SOCKFS', false);
-unexportedRuntimeSymbol('_setNetworkCallback', false);
-unexportedRuntimeSymbol('tempFixedLengthArray', false);
-unexportedRuntimeSymbol('miniTempWebGLFloatBuffers', false);
-unexportedRuntimeSymbol('heapObjectForWebGLType', false);
-unexportedRuntimeSymbol('heapAccessShiftForWebGLHeap', false);
-unexportedRuntimeSymbol('GL', false);
-unexportedRuntimeSymbol('emscriptenWebGLGet', false);
-unexportedRuntimeSymbol('computeUnpackAlignedImageSize', false);
-unexportedRuntimeSymbol('emscriptenWebGLGetTexPixelData', false);
-unexportedRuntimeSymbol('emscriptenWebGLGetUniform', false);
-unexportedRuntimeSymbol('webglGetUniformLocation', false);
-unexportedRuntimeSymbol('webglPrepareUniformLocationsBeforeFirstUse', false);
-unexportedRuntimeSymbol('webglGetLeftBracePos', false);
-unexportedRuntimeSymbol('emscriptenWebGLGetVertexAttrib', false);
-unexportedRuntimeSymbol('writeGLArray', false);
-unexportedRuntimeSymbol('AL', false);
-unexportedRuntimeSymbol('SDL_unicode', false);
-unexportedRuntimeSymbol('SDL_ttfContext', false);
-unexportedRuntimeSymbol('SDL_audio', false);
-unexportedRuntimeSymbol('SDL', false);
-unexportedRuntimeSymbol('SDL_gfx', false);
-unexportedRuntimeSymbol('GLUT', false);
-unexportedRuntimeSymbol('EGL', false);
-unexportedRuntimeSymbol('GLFW_Window', false);
-unexportedRuntimeSymbol('GLFW', false);
-unexportedRuntimeSymbol('GLEW', false);
-unexportedRuntimeSymbol('IDBStore', false);
-unexportedRuntimeSymbol('runAndAbortIfError', false);
-unexportedRuntimeSymbol('Asyncify', false);
-unexportedRuntimeSymbol('Fibers', false);
-unexportedRuntimeSymbol('emscriptenWebGLGetIndexed', false);
-unexportedRuntimeSymbol('ALLOC_NORMAL', false);
-unexportedRuntimeSymbol('ALLOC_STACK', false);
-unexportedRuntimeSymbol('allocate', false);
-unexportedRuntimeSymbol('WebXR', false);
-var ptrToString = missingLibraryFunc('ptrToString');
-var inetPton4 = missingLibraryFunc('inetPton4');
-var inetNtop4 = missingLibraryFunc('inetNtop4');
-var inetPton6 = missingLibraryFunc('inetPton6');
-var inetNtop6 = missingLibraryFunc('inetNtop6');
-var readSockaddr = missingLibraryFunc('readSockaddr');
-var writeSockaddr = missingLibraryFunc('writeSockaddr');
-var getHostByName = missingLibraryFunc('getHostByName');
-var traverseStack = missingLibraryFunc('traverseStack');
-var convertPCtoSourceLocation = missingLibraryFunc('convertPCtoSourceLocation');
-var readAsmConstArgs = missingLibraryFunc('readAsmConstArgs');
-var mainThreadEM_ASM = missingLibraryFunc('mainThreadEM_ASM');
-var jstoi_s = missingLibraryFunc('jstoi_s');
-var listenOnce = missingLibraryFunc('listenOnce');
-var autoResumeAudioContext = missingLibraryFunc('autoResumeAudioContext');
-var getDynCaller = missingLibraryFunc('getDynCaller');
-var asmjsMangle = missingLibraryFunc('asmjsMangle');
-var writeI53ToI64Clamped = missingLibraryFunc('writeI53ToI64Clamped');
-var writeI53ToI64Signaling = missingLibraryFunc('writeI53ToI64Signaling');
-var writeI53ToU64Clamped = missingLibraryFunc('writeI53ToU64Clamped');
-var writeI53ToU64Signaling = missingLibraryFunc('writeI53ToU64Signaling');
-var convertI32PairToI53 = missingLibraryFunc('convertI32PairToI53');
-var convertU32PairToI53 = missingLibraryFunc('convertU32PairToI53');
-var reallyNegative = missingLibraryFunc('reallyNegative');
-var unSign = missingLibraryFunc('unSign');
-var strLen = missingLibraryFunc('strLen');
-var reSign = missingLibraryFunc('reSign');
-var formatString = missingLibraryFunc('formatString');
-var getSocketFromFD = missingLibraryFunc('getSocketFromFD');
-var getSocketAddress = missingLibraryFunc('getSocketAddress');
-var findCanvasEventTarget = missingLibraryFunc('findCanvasEventTarget');
-var registerWheelEventCallback = missingLibraryFunc('registerWheelEventCallback');
-var registerFocusEventCallback = missingLibraryFunc('registerFocusEventCallback');
-var fillDeviceOrientationEventData = missingLibraryFunc('fillDeviceOrientationEventData');
-var registerDeviceOrientationEventCallback = missingLibraryFunc('registerDeviceOrientationEventCallback');
-var fillDeviceMotionEventData = missingLibraryFunc('fillDeviceMotionEventData');
-var registerDeviceMotionEventCallback = missingLibraryFunc('registerDeviceMotionEventCallback');
-var screenOrientation = missingLibraryFunc('screenOrientation');
-var fillOrientationChangeEventData = missingLibraryFunc('fillOrientationChangeEventData');
-var registerOrientationChangeEventCallback = missingLibraryFunc('registerOrientationChangeEventCallback');
-var fillFullscreenChangeEventData = missingLibraryFunc('fillFullscreenChangeEventData');
-var registerFullscreenChangeEventCallback = missingLibraryFunc('registerFullscreenChangeEventCallback');
-var JSEvents_requestFullscreen = missingLibraryFunc('JSEvents_requestFullscreen');
-var JSEvents_resizeCanvasForFullscreen = missingLibraryFunc('JSEvents_resizeCanvasForFullscreen');
-var registerRestoreOldStyle = missingLibraryFunc('registerRestoreOldStyle');
-var hideEverythingExceptGivenElement = missingLibraryFunc('hideEverythingExceptGivenElement');
-var restoreHiddenElements = missingLibraryFunc('restoreHiddenElements');
-var setLetterbox = missingLibraryFunc('setLetterbox');
-var softFullscreenResizeWebGLRenderTarget = missingLibraryFunc('softFullscreenResizeWebGLRenderTarget');
-var doRequestFullscreen = missingLibraryFunc('doRequestFullscreen');
-var fillPointerlockChangeEventData = missingLibraryFunc('fillPointerlockChangeEventData');
-var registerPointerlockChangeEventCallback = missingLibraryFunc('registerPointerlockChangeEventCallback');
-var registerPointerlockErrorEventCallback = missingLibraryFunc('registerPointerlockErrorEventCallback');
-var requestPointerLock = missingLibraryFunc('requestPointerLock');
-var fillVisibilityChangeEventData = missingLibraryFunc('fillVisibilityChangeEventData');
-var registerVisibilityChangeEventCallback = missingLibraryFunc('registerVisibilityChangeEventCallback');
-var fillGamepadEventData = missingLibraryFunc('fillGamepadEventData');
-var registerGamepadEventCallback = missingLibraryFunc('registerGamepadEventCallback');
-var registerBeforeUnloadEventCallback = missingLibraryFunc('registerBeforeUnloadEventCallback');
-var fillBatteryEventData = missingLibraryFunc('fillBatteryEventData');
-var battery = missingLibraryFunc('battery');
-var registerBatteryEventCallback = missingLibraryFunc('registerBatteryEventCallback');
-var setCanvasElementSize = missingLibraryFunc('setCanvasElementSize');
-var getCanvasElementSize = missingLibraryFunc('getCanvasElementSize');
-var checkWasiClock = missingLibraryFunc('checkWasiClock');
-var setImmediateWrapped = missingLibraryFunc('setImmediateWrapped');
-var clearImmediateWrapped = missingLibraryFunc('clearImmediateWrapped');
-var polyfillSetImmediate = missingLibraryFunc('polyfillSetImmediate');
-var exception_addRef = missingLibraryFunc('exception_addRef');
-var exception_decRef = missingLibraryFunc('exception_decRef');
-var _setNetworkCallback = missingLibraryFunc('_setNetworkCallback');
-var emscriptenWebGLGetUniform = missingLibraryFunc('emscriptenWebGLGetUniform');
-var emscriptenWebGLGetVertexAttrib = missingLibraryFunc('emscriptenWebGLGetVertexAttrib');
-var writeGLArray = missingLibraryFunc('writeGLArray');
-var SDL_unicode = missingLibraryFunc('SDL_unicode');
-var SDL_ttfContext = missingLibraryFunc('SDL_ttfContext');
-var SDL_audio = missingLibraryFunc('SDL_audio');
-var emscriptenWebGLGetIndexed = missingLibraryFunc('emscriptenWebGLGetIndexed');
+var unexportedRuntimeSymbols = [
+  'run',
+  'UTF8ArrayToString',
+  'UTF8ToString',
+  'stringToUTF8Array',
+  'stringToUTF8',
+  'lengthBytesUTF8',
+  'addOnPreRun',
+  'addOnInit',
+  'addOnPreMain',
+  'addOnExit',
+  'addOnPostRun',
+  'FS_createFolder',
+  'FS_createLink',
+  'getLEB',
+  'getFunctionTables',
+  'alignFunctionTables',
+  'registerFunctions',
+  'prettyPrint',
+  'getCompilerSetting',
+  'print',
+  'printErr',
+  'getTempRet0',
+  'setTempRet0',
+  'callMain',
+  'abort',
+  'keepRuntimeAlive',
+  'wasmMemory',
+  'stackSave',
+  'stackRestore',
+  'stackAlloc',
+  'writeStackCookie',
+  'checkStackCookie',
+  'ptrToString',
+  'zeroMemory',
+  'stringToNewUTF8',
+  'exitJS',
+  'getHeapMax',
+  'emscripten_realloc_buffer',
+  'ENV',
+  'ERRNO_CODES',
+  'ERRNO_MESSAGES',
+  'setErrNo',
+  'inetPton4',
+  'inetNtop4',
+  'inetPton6',
+  'inetNtop6',
+  'readSockaddr',
+  'writeSockaddr',
+  'DNS',
+  'getHostByName',
+  'Protocols',
+  'Sockets',
+  'getRandomDevice',
+  'warnOnce',
+  'traverseStack',
+  'UNWIND_CACHE',
+  'convertPCtoSourceLocation',
+  'readAsmConstArgsArray',
+  'readAsmConstArgs',
+  'mainThreadEM_ASM',
+  'jstoi_q',
+  'jstoi_s',
+  'getExecutableName',
+  'listenOnce',
+  'autoResumeAudioContext',
+  'dynCallLegacy',
+  'getDynCaller',
+  'dynCall',
+  'handleException',
+  'runtimeKeepalivePush',
+  'runtimeKeepalivePop',
+  'callUserCallback',
+  'maybeExit',
+  'safeSetTimeout',
+  'asmjsMangle',
+  'asyncLoad',
+  'alignMemory',
+  'mmapAlloc',
+  'writeI53ToI64',
+  'writeI53ToI64Clamped',
+  'writeI53ToI64Signaling',
+  'writeI53ToU64Clamped',
+  'writeI53ToU64Signaling',
+  'readI53FromI64',
+  'readI53FromU64',
+  'convertI32PairToI53',
+  'convertI32PairToI53Checked',
+  'convertU32PairToI53',
+  'getCFunc',
+  'ccall',
+  'cwrap',
+  'uleb128Encode',
+  'sigToWasmTypes',
+  'convertJsFunctionToWasm',
+  'freeTableIndexes',
+  'functionsInTableMap',
+  'getEmptyTableSlot',
+  'updateTableMap',
+  'addFunction',
+  'removeFunction',
+  'reallyNegative',
+  'unSign',
+  'strLen',
+  'reSign',
+  'formatString',
+  'setValue',
+  'getValue',
+  'PATH',
+  'PATH_FS',
+  'intArrayFromString',
+  'intArrayToString',
+  'AsciiToString',
+  'stringToAscii',
+  'UTF16Decoder',
+  'UTF16ToString',
+  'stringToUTF16',
+  'lengthBytesUTF16',
+  'UTF32ToString',
+  'stringToUTF32',
+  'lengthBytesUTF32',
+  'allocateUTF8',
+  'allocateUTF8OnStack',
+  'writeStringToMemory',
+  'writeArrayToMemory',
+  'writeAsciiToMemory',
+  'SYSCALLS',
+  'getSocketFromFD',
+  'getSocketAddress',
+  'JSEvents',
+  'registerKeyEventCallback',
+  'specialHTMLTargets',
+  'maybeCStringToJsString',
+  'findEventTarget',
+  'findCanvasEventTarget',
+  'getBoundingClientRect',
+  'fillMouseEventData',
+  'registerMouseEventCallback',
+  'registerWheelEventCallback',
+  'registerUiEventCallback',
+  'registerFocusEventCallback',
+  'fillDeviceOrientationEventData',
+  'registerDeviceOrientationEventCallback',
+  'fillDeviceMotionEventData',
+  'registerDeviceMotionEventCallback',
+  'screenOrientation',
+  'fillOrientationChangeEventData',
+  'registerOrientationChangeEventCallback',
+  'fillFullscreenChangeEventData',
+  'registerFullscreenChangeEventCallback',
+  'JSEvents_requestFullscreen',
+  'JSEvents_resizeCanvasForFullscreen',
+  'registerRestoreOldStyle',
+  'hideEverythingExceptGivenElement',
+  'restoreHiddenElements',
+  'setLetterbox',
+  'currentFullscreenStrategy',
+  'restoreOldWindowedStyle',
+  'softFullscreenResizeWebGLRenderTarget',
+  'doRequestFullscreen',
+  'fillPointerlockChangeEventData',
+  'registerPointerlockChangeEventCallback',
+  'registerPointerlockErrorEventCallback',
+  'requestPointerLock',
+  'fillVisibilityChangeEventData',
+  'registerVisibilityChangeEventCallback',
+  'registerTouchEventCallback',
+  'fillGamepadEventData',
+  'registerGamepadEventCallback',
+  'registerBeforeUnloadEventCallback',
+  'fillBatteryEventData',
+  'battery',
+  'registerBatteryEventCallback',
+  'setCanvasElementSize',
+  'getCanvasElementSize',
+  'demangle',
+  'demangleAll',
+  'jsStackTrace',
+  'stackTrace',
+  'ExitStatus',
+  'getEnvStrings',
+  'checkWasiClock',
+  'doReadv',
+  'doWritev',
+  'dlopenMissingError',
+  'setImmediateWrapped',
+  'clearImmediateWrapped',
+  'polyfillSetImmediate',
+  'uncaughtExceptionCount',
+  'exceptionLast',
+  'exceptionCaught',
+  'ExceptionInfo',
+  'exception_addRef',
+  'exception_decRef',
+  'Browser',
+  'setMainLoop',
+  'wget',
+  'FS',
+  'MEMFS',
+  'TTY',
+  'PIPEFS',
+  'SOCKFS',
+  '_setNetworkCallback',
+  'tempFixedLengthArray',
+  'miniTempWebGLFloatBuffers',
+  'heapObjectForWebGLType',
+  'heapAccessShiftForWebGLHeap',
+  'GL',
+  'emscriptenWebGLGet',
+  'computeUnpackAlignedImageSize',
+  'emscriptenWebGLGetTexPixelData',
+  'emscriptenWebGLGetUniform',
+  'webglGetUniformLocation',
+  'webglPrepareUniformLocationsBeforeFirstUse',
+  'webglGetLeftBracePos',
+  'emscriptenWebGLGetVertexAttrib',
+  'writeGLArray',
+  'AL',
+  'SDL_unicode',
+  'SDL_ttfContext',
+  'SDL_audio',
+  'SDL',
+  'SDL_gfx',
+  'GLUT',
+  'EGL',
+  'GLFW_Window',
+  'GLFW',
+  'GLEW',
+  'IDBStore',
+  'runAndAbortIfError',
+  'Asyncify',
+  'Fibers',
+  'emscriptenWebGLGetIndexed',
+  'ALLOC_NORMAL',
+  'ALLOC_STACK',
+  'allocate',
+  'WebXR',
+];
+unexportedRuntimeSymbols.forEach(unexportedRuntimeSymbol);
+var missingLibrarySymbols = [
+  'ptrToString',
+  'inetPton4',
+  'inetNtop4',
+  'inetPton6',
+  'inetNtop6',
+  'readSockaddr',
+  'writeSockaddr',
+  'getHostByName',
+  'traverseStack',
+  'convertPCtoSourceLocation',
+  'readAsmConstArgs',
+  'mainThreadEM_ASM',
+  'jstoi_s',
+  'listenOnce',
+  'autoResumeAudioContext',
+  'getDynCaller',
+  'asmjsMangle',
+  'writeI53ToI64Clamped',
+  'writeI53ToI64Signaling',
+  'writeI53ToU64Clamped',
+  'writeI53ToU64Signaling',
+  'convertI32PairToI53',
+  'convertU32PairToI53',
+  'reallyNegative',
+  'unSign',
+  'strLen',
+  'reSign',
+  'formatString',
+  'getSocketFromFD',
+  'getSocketAddress',
+  'findCanvasEventTarget',
+  'registerWheelEventCallback',
+  'registerFocusEventCallback',
+  'fillDeviceOrientationEventData',
+  'registerDeviceOrientationEventCallback',
+  'fillDeviceMotionEventData',
+  'registerDeviceMotionEventCallback',
+  'screenOrientation',
+  'fillOrientationChangeEventData',
+  'registerOrientationChangeEventCallback',
+  'fillFullscreenChangeEventData',
+  'registerFullscreenChangeEventCallback',
+  'JSEvents_requestFullscreen',
+  'JSEvents_resizeCanvasForFullscreen',
+  'registerRestoreOldStyle',
+  'hideEverythingExceptGivenElement',
+  'restoreHiddenElements',
+  'setLetterbox',
+  'softFullscreenResizeWebGLRenderTarget',
+  'doRequestFullscreen',
+  'fillPointerlockChangeEventData',
+  'registerPointerlockChangeEventCallback',
+  'registerPointerlockErrorEventCallback',
+  'requestPointerLock',
+  'fillVisibilityChangeEventData',
+  'registerVisibilityChangeEventCallback',
+  'fillGamepadEventData',
+  'registerGamepadEventCallback',
+  'registerBeforeUnloadEventCallback',
+  'fillBatteryEventData',
+  'battery',
+  'registerBatteryEventCallback',
+  'setCanvasElementSize',
+  'getCanvasElementSize',
+  'checkWasiClock',
+  'setImmediateWrapped',
+  'clearImmediateWrapped',
+  'polyfillSetImmediate',
+  'exception_addRef',
+  'exception_decRef',
+  '_setNetworkCallback',
+  'emscriptenWebGLGetUniform',
+  'emscriptenWebGLGetVertexAttrib',
+  'writeGLArray',
+  'SDL_unicode',
+  'SDL_ttfContext',
+  'SDL_audio',
+  'emscriptenWebGLGetIndexed',
+];
+missingLibrarySymbols.forEach(missingLibrarySymbol)
 
 
 var calledRun;
-
-var calledMain = false;
 
 dependenciesFulfilled = function runCaller() {
   // If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
@@ -9848,9 +9873,6 @@ function callMain(args) {
   }
   catch (e) {
     return handleException(e);
-  } finally {
-    calledMain = true;
-
   }
 }
 
