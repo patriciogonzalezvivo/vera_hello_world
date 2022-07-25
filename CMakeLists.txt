@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.2)
 
 project(hello_world LANGUAGES CXX)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -19,9 +19,8 @@ add_executable(hello_world
 )
 
 set_target_properties(hello_world PROPERTIES
-    CXX_STANDARD 11
+    CXX_STANDARD 14
     CXX_STANDARD_REQUIRED ON
-    CMAKE_CXX_EXTENSIONS OFF
 )
 
 # copy all files on assets on the build folder
@@ -56,7 +55,7 @@ if (EMSCRIPTEN)
     target_link_libraries(hello_world PRIVATE vera glfw webxr)
     
 else()
-    target_link_libraries(hello_world PRIVATE vera)
+    target_link_libraries(hello_world PRIVATE vera pthread dl)
 
 endif()
 
