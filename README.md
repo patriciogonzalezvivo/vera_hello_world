@@ -1,9 +1,6 @@
-![](thumbnail.png)
+![VERA](https://user-images.githubusercontent.com/346914/180851411-5459cd7c-72f1-42dc-861a-b9c02b448bd3.gif)
 
-This is a "Hello World" program using [VERA](https://github.com/patriciogonzalezvivo/vera).
-
-Please visit [VERA](https://github.com/patriciogonzalezvivo/vera) repository for more information on how to compile.
-
+This is "Hello World" program demos the use of [C++ VERA framework](https://github.com/patriciogonzalezvivo/vera), which provides a low friction way of creating robust and perfomant creative applications that can be display in a big range of surfaces like: native OSX, Window and Linux apps; console app with out window manager for embebed systems like [RaspberryPi](https://www.raspberrypi.com/), [Nvidia Jetson Nano](https://developer.nvidia.com/embedded/jetson-nano-developer-kit) and [Khadas's VIM4](https://www.khadas.com/vim4); on the web embebed WASM apps or selfcontain WASM/WebGL interactives for NFT project; WebXR experiences for VR headsets like the Oculus Quest2 or realtime applications for holographic displays like [LGF](https://lookingglassfactory.com/).
 
 ## 1. Install Dependencies
 
