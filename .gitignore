@@ -68,8 +68,10 @@ Desktop.ini
 
 nohup.out
 .vscode
-/doc/deps/
-/doc/wasm/
-/doc/CMake*
-/doc/Makefile
-/doc/cmake*
+
+docs/deps/
+docs/wasm/
+docs/CMake*
+docs/Makefile
+docs/cmake*
+docs/*.cmake
