@@ -91,7 +91,7 @@ mkdir build
 cd build
 cmake ..
 make
-./hello_3d_world
+./vera_app
 ```
 
 ### For Linux with no X11 Window Manager
@@ -103,7 +103,7 @@ mkdir build
 cd build
 cmake -DNO_X11=TRUE ..
 make
-./hello_3d_world
+./vera_app
 ```
 
 ### As a Emscripten WebAssembly project

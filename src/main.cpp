@@ -8,30 +8,24 @@ using namespace glm;
 
 class VeraApp : public App {
     
-    Shader  world_shader;
-    Texture world_texture;
-
-    vec3    satellite_pos;
-    vector<vec3> orbit;
-
-    Light   sun;
-    Camera  cam; 
+    vec3            satellite;
+    vector<vec3>    orbit;
+    Light           sun;
 
     void setup() {
 
         // Set global settings
-        background(0.0);
+        background(0.0f);
         blendMode(BLEND_ALPHA);
 
         // Set camera
-        cam.setPosition( vec3(0.0f, 0.0f, 10.0f) );
-        cam.lookAt( vec3(0.0f, 0.1f, 0.0f) );
+        camera()->setPosition( vec3(0.0f, 0.0f, 10.0f) );
+        camera()->lookAt( vec3(0.0f, 0.0f, 0.0f) );
 
         // Set light
         sun.setPosition( vec3(1.0f,1.0f,1.0f) );
         sun.setType(LIGHT_POINT);
-        addLight(sun);
-        lights();
+        addLight("sun", sun);
 
         // Set world shader and texture
         string frag = R"(
@@ -66,26 +60,24 @@ class VeraApp : public App {
                 gl_FragColor = vec4(color, 1.);
             }
         )";
-        world_shader = createShader(frag);
-        world_texture.load( "earth-water.png" );
+        addShader("world", createShader(frag));
+        addTexture("earth-water", "earth-water.png");
 
         // Set satellite label
-        addLabel("Hi!", &satellite_pos, LABEL_LINE_TO_WINDOW_BORDER, 10.0f);        
+        addLabel("Beep beep", &satellite, LABEL_LINE_TO_WINDOW_BORDER, 10.0f);        
     }
 
     void update() {
         if (frameCount%15 == 0) {
-            orbit.push_back( satellite_pos );
+            orbit.push_back( satellite );
             if (orbit.size() > 500)
                 orbit.erase(orbit.begin());
-
         }
     }
 
     void draw() {
         clear(0.0f);
 
-        setCamera(cam);
         setDepthTest(true);
         orbitControl();
 
@@ -95,11 +87,13 @@ class VeraApp : public App {
         noStroke();
         push();
         rotateY(frameCount * 0.0025f);
-        shader(world_shader);
-        texture(world_texture);
+        Shader* world_shader = shader("world");
+        world_shader->setUniform("u_light", sun.getPosition());
+        world_shader->setUniformTexture("u_tex0", texture("earth-water"));
         sphere(1.0f);
-        resetShader();
         pop();
+        
+        resetShader();
 
         push();
         rotateY(frameCount * 0.0035f);
@@ -107,7 +101,7 @@ class VeraApp : public App {
         translate(0.0f,0.0f,1.2f);
         fill(0.75f + sin(millis() * 0.005f) * 0.25f, 0.0f, 0.0f);
         box(0.075f);
-        satellite_pos = vec3( getWorldMatrix() * vec4(0.0f, 0.0f, 1.2f, 0.0f) );
+        satellite = vec3( worldMatrix() * vec4(0.0f, 0.0f, 1.2f, 0.0f) );
         pop();
 
         strokeWeight(1.0);
@@ -117,7 +111,6 @@ class VeraApp : public App {
         textAlign(ALIGN_CENTER);
         textAlign(ALIGN_MIDDLE);
         textSize(28.0f);
-        resetCamera();
         fill(1.0f);
         text("Hello World", width * 0.5f, height * 0.95f);
 
@@ -125,15 +118,23 @@ class VeraApp : public App {
         stroke(1.0f);
         labels();
     }
-};
 
+    void onWindowResize(int _width, int _height) {
+        camera()->setViewport(_width, _height);
+    }
+};
 
 VeraApp app;
 
 int main(int argc, char **argv) {
-    WindowProperties prop;
-    // prop.style = LENTICULAR;
-    // setQuiltProperties(2);
+    vera::WindowProperties prop;
+    prop.screen_width = 1080/2;
+    prop.screen_height = 1920/2;
+
+    #if !defined(__EMSCRIPTEN__) && !defined(PLATFORM_RPI)
+    prop.msaa = 4;
+    #endif
+
     app.run(prop);
     return 1;
 }
