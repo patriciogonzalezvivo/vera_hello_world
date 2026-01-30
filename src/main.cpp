@@ -21,6 +21,8 @@ class VeraApp : public App {
         // Set camera
         camera()->setPosition( vec3(0.0f, 0.0f, 10.0f) );
         camera()->lookAt( vec3(0.0f, 0.0f, 0.0f) );
+        camera()->setViewport( (int)width, (int)height );
+        pixelDensity( std::max(1.0, std::min(width, height) / 1200.0) * getDisplayPixelRatio());
 
         // Set light
         sun.setPosition( vec3(1.0f,1.0f,1.0f) );
@@ -121,6 +123,7 @@ class VeraApp : public App {
 
     void onWindowResize(int _width, int _height) {
         camera()->setViewport(_width, _height);
+        pixelDensity( std::max(1.0, std::min(_width, _height) / 1200.0) * getDisplayPixelRatio());
     }
 };
 
